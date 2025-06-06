@@ -1,10 +1,10 @@
-// lib/screens/admin/driver_list_screen.dart
-
 import 'dart:convert';
 import 'package:flutter/material.dart';
 import '../../services/auth_service.dart';
 import 'create_driver_screen.dart';
 import 'biometric_driver_screen.dart'; // Pantalla para datos biométricos de un chofer
+import 'edit_driver_screen.dart'; // Nueva pantalla de edición
+import 'show_driver_screen.dart'; // Nueva pantalla de detalles
 import 'package:http/http.dart' as http;
 
 class DriverListScreen extends StatefulWidget {
@@ -49,7 +49,6 @@ class _DriverListScreenState extends State<DriverListScreen> {
     );
     if (res.statusCode == 200) {
       final lista = jsonDecode(res.body) as List<dynamic>;
-      // Cada elemento se asume: { id, name, email, phone, ... }
       _drivers = lista.map((e) => Map<String, dynamic>.from(e)).toList();
       _filtered = List.from(_drivers);
     }
@@ -70,7 +69,6 @@ class _DriverListScreenState extends State<DriverListScreen> {
         backgroundColor: const Color(0xFF73003C),
         foregroundColor: Colors.white,
         actions: [
-          // Botón para agregar nuevo chofer
           IconButton(
             icon: const Icon(Icons.person_add),
             onPressed: () {
@@ -86,7 +84,6 @@ class _DriverListScreenState extends State<DriverListScreen> {
         padding: const EdgeInsets.all(16),
         child: Column(
           children: [
-            // Barra de búsqueda
             TextField(
               controller: _searchCtrl,
               decoration: InputDecoration(
@@ -98,8 +95,6 @@ class _DriverListScreenState extends State<DriverListScreen> {
               ),
             ),
             const SizedBox(height: 16),
-
-            // Lista o indicador de carga
             Expanded(
               child: _isLoading
                   ? const Center(child: CircularProgressIndicator())
@@ -116,11 +111,40 @@ class _DriverListScreenState extends State<DriverListScreen> {
                               trailing: Wrap(
                                 spacing: 12,
                                 children: [
+                                  // Botón para ver detalles (show)
+                                  IconButton(
+                                    icon:
+                                        const Icon(Icons.visibility, size: 20),
+                                    onPressed: () {
+                                      Navigator.push(
+                                        context,
+                                        MaterialPageRoute(
+                                          builder: (_) => ShowDriverScreen(
+                                            driverId: d['id'],
+                                            driverName: d['name'],
+                                          ),
+                                        ),
+                                      );
+                                    },
+                                  ),
                                   // Botón editar/actualizar datos del chofer
                                   IconButton(
                                     icon: const Icon(Icons.edit, size: 20),
-                                    onPressed: () {
-                                      // TODO: implementar edición de chofer
+                                    onPressed: () async {
+                                      final actualizado = await Navigator.push(
+                                        context,
+                                        MaterialPageRoute(
+                                          builder: (_) => EditDriverScreen(
+                                            driverId: d['id'],
+                                            initialName: d['name'],
+                                            initialEmail: d['email'],
+                                            initialPhone: d['phone'] ?? '',
+                                          ),
+                                        ),
+                                      );
+                                      if (actualizado == true) {
+                                        _fetchDrivers();
+                                      }
                                     },
                                   ),
                                   // Botón para registrar/ver datos biométricos
