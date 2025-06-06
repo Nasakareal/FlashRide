@@ -1,213 +1,223 @@
+// ------------- imports -------------
 import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:google_maps_flutter/google_maps_flutter.dart';
 import 'package:geolocator/geolocator.dart';
 import 'package:http/http.dart' as http;
-import '../shared/welcome_screen.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import '../shared/welcome_screen.dart';
+
+// ------------ constantes ------------
+const _apiKey = 'AIzaSyAunhRNSucPlDvMPIAdah7pERRg-pJfKZw';
+const _fallback = LatLng(19.7050, -101.1927);
+
+// ------------ modelo simple ------------
+class _Sug {
+  final String id, desc;
+  _Sug(this.id, this.desc);
+}
 
 class PassengerHomeScreen extends StatefulWidget {
   const PassengerHomeScreen({super.key});
-
   @override
-  State<PassengerHomeScreen> createState() => _PassengerHomeScreenState();
+  State<PassengerHomeScreen> createState() => _State();
 }
 
-class _PassengerHomeScreenState extends State<PassengerHomeScreen> {
-  GoogleMapController? _mapController;
-  LatLng? _currentPosition;
-  final TextEditingController _searchController = TextEditingController();
-  LatLng? _destination;
-  final Set<Marker> _markers = {};
+class _State extends State<PassengerHomeScreen> {
+  /* ---------- estado ---------- */
+  GoogleMapController? _map;
+  LatLng? _me, _dest;
+  final _markers = <Marker>{};
+  final _searchCtl = TextEditingController();
+  final _sugs = <_Sug>[];
+  bool _loadingSugs = false;
 
-  final List<LatLng> _carPositions = [
-    LatLng(19.7060, -101.1910),
-    LatLng(19.7030, -101.1950),
-    LatLng(19.7070, -101.1940),
-  ];
-
-  static final LatLng _fallback = LatLng(19.7050, -101.1927);
-
+  /* ---------- ciclo ---------- */
   @override
   void initState() {
     super.initState();
-    _determinePosition();
-  }
-
-  Future<void> _determinePosition() async {
-    try {
-      if (!await Geolocator.isLocationServiceEnabled()) {
-        setState(() => _currentPosition = _fallback);
-        return;
-      }
-      var perm = await Geolocator.checkPermission();
-      if (perm == LocationPermission.denied) {
-        perm = await Geolocator.requestPermission();
-        if (perm == LocationPermission.denied) {
-          return setState(() => _currentPosition = _fallback);
-        }
-      }
-      if (perm == LocationPermission.deniedForever) {
-        return setState(() => _currentPosition = _fallback);
-      }
-      final p = await Geolocator.getCurrentPosition();
-      setState(() {
-        _currentPosition = LatLng(p.latitude, p.longitude);
-        _setupMarkers();
-      });
-    } catch (_) {
-      setState(() => _currentPosition = _fallback);
-    }
-  }
-
-  Future<void> _searchAndNavigate() async {
-    final q = _searchController.text.trim();
-    if (q.isEmpty) return;
-    const key = 'AIzaSyDVmv1Gb4zNaZQsP1jPVw5IdevWH5brTaY';
-    final url = Uri.parse(
-        'https://maps.googleapis.com/maps/api/geocode/json?address=${Uri.encodeComponent(q)}&key=$key');
-    final r = await http.get(url);
-    final data = json.decode(r.body);
-    if (data['status'] == 'OK') {
-      final loc = data['results'][0]['geometry']['location'];
-      final pos = LatLng(loc['lat'], loc['lng']);
-      _mapController?.animateCamera(CameraUpdate.newLatLngZoom(pos, 15));
-      setState(() {
-        _destination = pos;
-        _setupMarkers();
-      });
-    } else {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Dirección no encontrada')),
-      );
-    }
-  }
-
-  void _setupMarkers() {
-    _markers.clear();
-    if (_currentPosition != null) {
-      _markers.add(Marker(
-        markerId: const MarkerId('you'),
-        position: _currentPosition!,
-        infoWindow: const InfoWindow(title: 'Tú estás aquí'),
-        icon: BitmapDescriptor.defaultMarkerWithHue(BitmapDescriptor.hueAzure),
-      ));
-    }
-    for (var i = 0; i < _carPositions.length; i++) {
-      _markers.add(Marker(
-        markerId: MarkerId('car_$i'),
-        position: _carPositions[i],
-        infoWindow: InfoWindow(title: 'Carrito $i'),
-      ));
-    }
-    if (_destination != null) {
-      _markers.add(Marker(
-        markerId: const MarkerId('dest'),
-        position: _destination!,
-        infoWindow: const InfoWindow(title: 'Destino'),
-        icon: BitmapDescriptor.defaultMarkerWithHue(BitmapDescriptor.hueGreen),
-      ));
-    }
-  }
-
-  void _logout() async {
-    final prefs = await SharedPreferences.getInstance();
-    await prefs.clear();
-    if (!mounted) return;
-    Navigator.pushAndRemoveUntil(
-      context,
-      MaterialPageRoute(builder: (_) => const WelcomeScreen()),
-      (r) => false,
-    );
-  }
-
-  void _requestRide() {
-    if (_destination == null) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Selecciona un destino primero')),
-      );
-      return;
-    }
-    // LLAMA AQUÍ A TU BACKEND PASÁNDOLE _destination.latitude/lng
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(content: Text('Viaje solicitado a $_destination')),
-    );
+    _locate();
   }
 
   @override
-  Widget build(BuildContext context) {
+  void dispose() {
+    _map?.dispose();
+    _searchCtl.dispose();
+    super.dispose();
+  }
+
+  /* ---------- GPS ---------- */
+  Future<void> _locate() async {
+    try {
+      if (!await Geolocator.isLocationServiceEnabled())
+        return setState(() => _me = _fallback);
+      var p = await Geolocator.checkPermission();
+      if (p == LocationPermission.denied)
+        p = await Geolocator.requestPermission();
+      if (p == LocationPermission.denied ||
+          p == LocationPermission.deniedForever)
+        return setState(() => _me = _fallback);
+      final pos = await Geolocator.getCurrentPosition();
+      setState(() {
+        _me = LatLng(pos.latitude, pos.longitude);
+        _paint();
+      });
+    } catch (_) {
+      setState(() => _me = _fallback);
+    }
+  }
+
+  /* ---------- Autocomplete ---------- */
+  Future<void> _askSug(String txt) async {
+    if (txt.isEmpty) return setState(() => _sugs.clear());
+    setState(() => _loadingSugs = true);
+    final uri = Uri.parse(
+        'https://maps.googleapis.com/maps/api/place/autocomplete/json'
+        '?input=${Uri.encodeComponent(txt)}&key=$_apiKey&language=es&components=country:mx');
+    final r = await http.get(uri);
+    final j = json.decode(r.body);
+    setState(() {
+      _loadingSugs = false;
+      _sugs
+        ..clear()
+        ..addAll((j['predictions'] as List).map(
+            (e) => _Sug(e['place_id'] as String, e['description'] as String)));
+    });
+  }
+
+  Future<void> _pickSug(_Sug s) async {
+    _searchCtl.text = s.desc;
+    _sugs.clear();
+    final r = await http
+        .get(Uri.parse('https://maps.googleapis.com/maps/api/place/details/json'
+            '?place_id=${s.id}&key=$_apiKey&fields=geometry'));
+    final loc = json.decode(r.body)['result']['geometry']['location'];
+    final pos = LatLng(loc['lat'], loc['lng']);
+    _map?.animateCamera(CameraUpdate.newLatLngZoom(pos, 15));
+    setState(() {
+      _dest = pos;
+      _paint();
+    });
+  }
+
+  /* ---------- markers ---------- */
+  void _paint() {
+    _markers
+      ..clear()
+      ..addIf(
+          _me != null,
+          () => Marker(
+              markerId: const MarkerId('me'),
+              position: _me!,
+              icon: BitmapDescriptor.defaultMarkerWithHue(
+                  BitmapDescriptor.hueAzure)))
+      ..addIf(
+          _dest != null,
+          () => Marker(
+              markerId: const MarkerId('dest'),
+              position: _dest!,
+              icon: BitmapDescriptor.defaultMarkerWithHue(
+                  BitmapDescriptor.hueGreen)));
+  }
+
+  /* ---------- UI ---------- */
+  @override
+  Widget build(BuildContext ctx) {
     return Scaffold(
       appBar: AppBar(
-        title: const Text('Bienvenido, Pasajero'),
-        actions: [
-          IconButton(icon: const Icon(Icons.logout), onPressed: _logout),
-        ],
-      ),
-      body: _currentPosition == null
-          ? const Center(child: CircularProgressIndicator())
-          : Stack(
-              children: [
-                GoogleMap(
-                  onMapCreated: (c) {
-                    _mapController = c;
-                    _setupMarkers();
-                  },
-                  initialCameraPosition: CameraPosition(
-                    target: _currentPosition!,
-                    zoom: 15,
-                  ),
-                  myLocationEnabled: true,
-                  markers: _markers,
-                ),
-                Positioned(
-                  top: 16,
-                  left: 16,
-                  right: 16,
-                  child: Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 12),
-                    decoration: BoxDecoration(
-                      color: Colors.white,
-                      borderRadius: BorderRadius.circular(8),
-                      boxShadow: const [
-                        BoxShadow(color: Colors.black26, blurRadius: 4)
-                      ],
-                    ),
-                    child: Row(
-                      children: [
-                        Expanded(
-                          child: TextField(
-                            controller: _searchController,
-                            decoration: const InputDecoration(
-                              hintText: 'Buscar dirección…',
-                              border: InputBorder.none,
-                            ),
-                            onSubmitted: (_) => _searchAndNavigate(),
-                          ),
-                        ),
-                        IconButton(
-                            icon: const Icon(Icons.search),
-                            onPressed: _searchAndNavigate),
-                      ],
-                    ),
-                  ),
-                ),
-                Positioned(
-                  bottom: 24,
-                  left: 50,
-                  right: 50,
-                  child: ElevatedButton(
-                    onPressed: _requestRide,
+          title: const Text('Bienvenido, Pasajero'),
+          leading: Builder(
+              builder: (c) => IconButton(
+                  icon: const Icon(Icons.menu),
+                  onPressed: () => Scaffold.of(c).openDrawer()))),
+      drawer: Drawer(
+          child: ListView(padding: EdgeInsets.zero, children: [
+        const DrawerHeader(
+            decoration: BoxDecoration(color: Colors.green),
+            child: Text('Menú',
+                style: TextStyle(color: Colors.white, fontSize: 24))),
+        ListTile(
+            leading: const Icon(Icons.logout),
+            title: const Text('Cerrar sesión'),
+            onTap: () async {
+              final p = await SharedPreferences.getInstance();
+              await p.clear();
+              if (!mounted) return;
+              Navigator.pushAndRemoveUntil(
+                  context,
+                  MaterialPageRoute(builder: (_) => const WelcomeScreen()),
+                  (_) => false);
+            }),
+      ])),
+      body: SafeArea(
+          child: Column(children: [
+        /* buscador + lista */
+        Padding(
+            padding: const EdgeInsets.all(8),
+            child: Column(children: [
+              TextField(
+                  controller: _searchCtl,
+                  decoration: InputDecoration(
+                      prefixIcon: const Icon(Icons.search),
+                      hintText: 'Buscar dirección…',
+                      border: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(8))),
+                  onChanged: _askSug),
+              if (_loadingSugs) const LinearProgressIndicator(minHeight: 2),
+              ..._sugs.map((s) => ListTile(
+                  dense: true,
+                  title: Text(s.desc, overflow: TextOverflow.ellipsis),
+                  onTap: () => _pickSug(s)))
+            ])),
+        /* mapa */
+        Expanded(
+            child: Container(
+                margin: const EdgeInsets.symmetric(horizontal: 8),
+                decoration: BoxDecoration(
+                    border: Border.all(color: Colors.grey.shade300),
+                    borderRadius: BorderRadius.circular(8)),
+                clipBehavior: Clip.hardEdge,
+                child: GoogleMap(
+                    onMapCreated: (c) {
+                      _map = c;
+                      _paint();
+                    },
+                    initialCameraPosition:
+                        CameraPosition(target: _me ?? _fallback, zoom: 15),
+                    myLocationEnabled: true,
+                    zoomControlsEnabled: false,
+                    markers: _markers))),
+        /* botón */
+        Padding(
+            padding: const EdgeInsets.all(12),
+            child: SizedBox(
+                width: double.infinity,
+                child: ElevatedButton(
+                    onPressed: () {
+                      if (_dest == null) {
+                        ScaffoldMessenger.of(context).showSnackBar(
+                            const SnackBar(
+                                content:
+                                    Text('Selecciona un destino primero')));
+                        return;
+                      }
+                      ScaffoldMessenger.of(context).showSnackBar(
+                          SnackBar(content: Text('Viaje solicitado a $_dest')));
+                    },
                     style: ElevatedButton.styleFrom(
-                      backgroundColor: Colors.green[700],
-                      padding: const EdgeInsets.symmetric(vertical: 14),
-                      shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(24)),
-                    ),
-                    child: const Text('Solicitar viaje aquí'),
-                  ),
-                ),
-              ],
-            ),
+                        backgroundColor: Colors.green[700],
+                        padding: const EdgeInsets.symmetric(vertical: 16),
+                        shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(24))),
+                    child: const Text('Solicitar viaje aquí'))))
+      ])),
     );
+  }
+}
+
+/* helpers */
+extension _SetExt<E> on Set<E> {
+  void addIf(bool cond, E Function() build) {
+    if (cond) add(build());
   }
 }

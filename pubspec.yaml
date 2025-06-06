@@ -1,7 +1,6 @@
 name: flashride_app
-description: A new Flutter project for FlashRide connected to Laravel.
-
-publish_to: 'none'
+description: FlashRide – mapa + autocomplete sin conflictos
+publish_to: "none"
 version: 1.0.0+1
 
 environment:
@@ -10,12 +9,11 @@ environment:
 dependencies:
   flutter:
     sdk: flutter
-  cupertino_icons: ^1.0.2
-  http: ^0.13.6
-  shared_preferences: ^2.2.2
-  geolocator: ^11.0.0
-  flutter_local_notifications: ^16.3.1
   google_maps_flutter: ^2.6.0
+  http: ^0.13.6
+  geolocator: ^11.1.0
+  shared_preferences: ^2.2.2
+  cupertino_icons: ^1.0.2
 
 dev_dependencies:
   flutter_test:
@@ -24,5 +22,6 @@ dev_dependencies:
 
 flutter:
   uses-material-design: true
+
   assets:
     - assets/images/

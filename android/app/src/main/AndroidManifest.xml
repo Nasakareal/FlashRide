@@ -14,13 +14,12 @@
         <!-- ✅ CLAVE DE API DE GOOGLE MAPS -->
         <meta-data
             android:name="com.google.android.geo.API_KEY"
-            android:value="AIzaSyDVmv1Gb4zNaZQsP1jPVw5IdevWH5brTaY"/>
+            android:value="AIzaSyAunhRNSucPlDvMPIAdah7pERRg-pJfKZw"/>
 
         <activity
             android:name=".MainActivity"
             android:exported="true"
             android:launchMode="singleTop"
-            android:taskAffinity=""
             android:theme="@style/LaunchTheme"
             android:configChanges="orientation|keyboardHidden|keyboard|screenSize|smallestScreenSize|locale|layoutDirection|fontScale|screenLayout|density|uiMode"
             android:hardwareAccelerated="true"

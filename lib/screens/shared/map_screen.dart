@@ -19,13 +19,20 @@ class _MapScreenState extends State<MapScreen> {
   final Set<Marker> _markers = {};
 
   // Posiciones simuladas de “carritos”
-  final List<LatLng> _carPositions = [
+  final List<LatLng> _carPositions = const [
     LatLng(19.7060, -101.1910),
     LatLng(19.7030, -101.1950),
     LatLng(19.7070, -101.1940),
   ];
 
-  static final LatLng _fallbackPosition = LatLng(19.7050, -101.1927);
+  static const LatLng _fallbackPosition = LatLng(19.7050, -101.1927);
+
+  @override
+  void dispose() {
+    _mapController?.dispose();
+    _searchController.dispose();
+    super.dispose();
+  }
 
   @override
   void initState() {
@@ -68,7 +75,7 @@ class _MapScreenState extends State<MapScreen> {
     final query = _searchController.text.trim();
     if (query.isEmpty) return;
 
-    const apiKey = 'AIzaSyDVmv1Gb4zNaZQsP1jPVw5IdevWH5brTaY';
+    const apiKey = 'AIzaSyAunhRNSucPlDvMPIAdah7pERRg-pJfKZw';
     final url = Uri.parse(
         'https://maps.googleapis.com/maps/api/geocode/json?address=${Uri.encodeComponent(query)}&key=$apiKey');
 

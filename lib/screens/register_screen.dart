@@ -50,7 +50,7 @@ class _RegisterScreenState extends State<RegisterScreen> {
     );
     setState(() => isLoading = false);
 
-    print('🔥 Resultado de register(): $result');
+    debugPrint('🔥 Resultado de register(): $result');
 
     if (!mounted) return;
 

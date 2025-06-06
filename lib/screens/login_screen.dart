@@ -37,11 +37,18 @@ class _LoginScreenState extends State<LoginScreen> {
 
       debugPrint('✅ Usuario con rol: $role');
 
-      Navigator.pushAndRemoveUntil(
-        context,
-        MaterialPageRoute(builder: (_) => const HomePage()),
-        (route) => false,
-      );
+      if (role == 'passenger') {
+        Navigator.pushReplacementNamed(context, '/passenger_home');
+      } else if (role == 'driver') {
+        Navigator.pushReplacementNamed(context, '/driver_home');
+      } else if (role == 'admin') {
+        Navigator.pushReplacementNamed(context, '/admin_home');
+      } else {
+        // Rol desconocido
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Rol no reconocido')),
+        );
+      }
     } else {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(

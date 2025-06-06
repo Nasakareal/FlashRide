@@ -1,9 +1,10 @@
 import 'dart:convert';
 import 'package:http/http.dart' as http;
 import 'package:shared_preferences/shared_preferences.dart';
+import 'dart:developer' as dev;
 
 class AuthService {
-  static const _baseUrl = 'http://localhost/FlashRide/public/api';
+  static const _baseUrl = 'http://158.23.170.129/api';
 
   /// LOGIN: devuelve true/false
   static Future<bool> login({
@@ -23,7 +24,7 @@ class AuthService {
       body: jsonEncode(body),
     );
 
-    print('📥 LOGIN ${res.statusCode}: ${res.body}');
+    dev.log('📥 LOGIN ${res.statusCode}: ${res.body}');
     if (res.statusCode == 200) {
       final data = jsonDecode(res.body);
       final prefs = await SharedPreferences.getInstance();
@@ -54,7 +55,7 @@ class AuthService {
           'password_confirmation': passwordConfirmation,
         }),
       );
-      print('📥 REGISTER ${res.statusCode}: ${res.body}');
+      dev.log('📥 REGISTER ${res.statusCode}: ${res.body}');
       final body = jsonDecode(res.body);
 
       if (res.statusCode == 201) {
@@ -76,7 +77,7 @@ class AuthService {
       }
     } catch (e) {
       // Falló la petición HTTP o parsing
-      print('🔥 REGISTER EXCEPTION: $e');
+      dev.log('🔥 REGISTER EXCEPTION: $e');
       return {
         'ok': false,
         'errors': {
