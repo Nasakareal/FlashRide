@@ -58,7 +58,8 @@ class WelcomeScreen extends StatelessWidget {
                             borderRadius: BorderRadius.circular(12),
                           ),
                           elevation: 8,
-                          shadowColor: Colors.amber.withOpacity(0.3),
+                          shadowColor:
+                              Colors.amber.withAlpha((255 * 0.3).toInt()),
                         ),
                         child: const Text('Iniciar sesión'),
                       ),

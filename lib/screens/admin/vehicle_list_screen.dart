@@ -113,9 +113,7 @@ class _VehicleListScreenState extends State<VehicleListScreen> {
                               subtitle: Text('Color: ${v['color'] ?? 'N/A'}'),
                               trailing: IconButton(
                                 icon: const Icon(Icons.edit, size: 20),
-                                onPressed: () {
-                                  // TODO: editar vehículo
-                                },
+                                onPressed: () {},
                               ),
                             );
                           },

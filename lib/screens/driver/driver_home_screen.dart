@@ -1,11 +1,14 @@
 import 'dart:convert';
+import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:http/http.dart' as http;
+import 'package:geolocator/geolocator.dart';
 import '../../services/auth_service.dart';
 import '../shared/welcome_screen.dart';
 import 'profile_screen.dart';
 import 'past_rides_screen.dart';
+import 'ride_details_screen.dart';
 
 class DriverHomeScreen extends StatefulWidget {
   const DriverHomeScreen({super.key});
@@ -20,25 +23,91 @@ class _DriverHomeScreenState extends State<DriverHomeScreen> {
   Map<String, dynamic>? _profileData;
   List<dynamic> _assignedRides = [];
 
+  Timer? _locationTimer;
+
   @override
   void initState() {
     super.initState();
     _loadDriverData();
+    _locationTimer = Timer.periodic(const Duration(seconds: 10), (_) {
+      if (_assignedRides.isNotEmpty) {
+        final rideId = _assignedRides[0]['id'];
+        _enviarUbicacion(rideId); // ubicación del viaje
+      }
+      _enviarUbicacionGlobal(); // ubicación global SIEMPRE
+    });
+  }
+
+  @override
+  void dispose() {
+    _locationTimer?.cancel(); // ⬅️ Cancelar al cerrar pantalla
+    super.dispose();
+  }
+
+  Future<void> _enviarUbicacionGlobal() async {
+    try {
+      final token = await AuthService.getToken();
+      final pos = await Geolocator.getCurrentPosition();
+
+      final response = await http.post(
+        Uri.parse('http://158.23.170.129/api/location/global'),
+        headers: {
+          'Authorization': 'Bearer $token',
+          'Content-Type': 'application/json',
+        },
+        body: jsonEncode({
+          'lat': pos.latitude,
+          'lng': pos.longitude,
+        }),
+      );
+
+      if (response.statusCode != 200) {
+        debugPrint('❌ Error al enviar ubicación global: ${response.body}');
+      } else {
+        debugPrint('🌍 Ubicación global actualizada');
+      }
+    } catch (e) {
+      debugPrint('🚨 Error global: $e');
+    }
+  }
+
+  Future<void> _enviarUbicacion(int rideId) async {
+    try {
+      final token = await AuthService.getToken();
+      final pos = await Geolocator.getCurrentPosition();
+
+      final response = await http.post(
+        Uri.parse('http://158.23.170.129/api/location/update'),
+        headers: {
+          'Authorization': 'Bearer $token',
+          'Content-Type': 'application/json',
+        },
+        body: jsonEncode({
+          'ride_id': rideId,
+          'driver_lat': pos.latitude,
+          'driver_lng': pos.longitude,
+        }),
+      );
+
+      if (response.statusCode != 200) {
+        debugPrint('❌ Error al enviar ubicación: ${response.body}');
+      } else {
+        debugPrint('📍 Ubicación actualizada');
+      }
+    } catch (e) {
+      debugPrint('🚨 Error al obtener ubicación: $e');
+    }
   }
 
   Future<void> _loadDriverData() async {
     setState(() => _isLoading = true);
-
-    // 1) Obtener token
     final token = await AuthService.getToken();
 
     if (token == null) {
-      // Si no hay token, forzamos logout
       _logout();
       return;
     }
 
-    // 2) Traer perfil (para conocer el userId)
     final profileRes = await http.get(
       Uri.parse('http://158.23.170.129/api/profile'),
       headers: {
@@ -52,12 +121,10 @@ class _DriverHomeScreenState extends State<DriverHomeScreen> {
       _userId = perfilJson['id'] as int;
       _profileData = perfilJson;
     } else {
-      // Error al obtener perfil: logout
       _logout();
       return;
     }
 
-    // 3) Traer todos los viajes y filtrar los asignados a este conductor
     final ridesRes = await http.get(
       Uri.parse('http://158.23.170.129/api/rides'),
       headers: {
@@ -69,12 +136,10 @@ class _DriverHomeScreenState extends State<DriverHomeScreen> {
     if (ridesRes.statusCode == 200) {
       final lista = jsonDecode(ridesRes.body) as List<dynamic>;
 
-      // Suponemos que cada ride tiene campos: id, origin, destination, driver_id, status
-      // Filtramos solo los que estén asignados a este driver (_userId)
-      // y su status sea “assigned” (u otro valor que en tu API signifique “pendiente de ser atendido”)
       _assignedRides = lista.where((ride) {
         final r = ride as Map<String, dynamic>;
-        return r['driver_id'] == _userId && r['status'] == 'assigned';
+        return r['driver_id'] == _userId &&
+            (r['status'] == 'accepted' || r['status'] == 'in_progress');
       }).toList();
     } else {
       _assignedRides = [];
@@ -111,15 +176,15 @@ class _DriverHomeScreenState extends State<DriverHomeScreen> {
         child: ListView(
           padding: EdgeInsets.zero,
           children: [
-            const DrawerHeader(
-              decoration: BoxDecoration(color: Color(0xFF73003C)),
+            DrawerHeader(
+              decoration: const BoxDecoration(color: Color(0xFF73003C)),
               child: Text(
-                'Menú Conductor',
-                style: TextStyle(color: Colors.white, fontSize: 24),
+                _profileData != null
+                    ? 'Bienvenido, ${_profileData!['name']}'
+                    : 'Menú Conductor',
+                style: const TextStyle(color: Colors.white, fontSize: 24),
               ),
             ),
-
-            // 1) Opción “Mi perfil”
             ListTile(
               leading: const Icon(Icons.person),
               title: const Text('Mi perfil'),
@@ -131,8 +196,14 @@ class _DriverHomeScreenState extends State<DriverHomeScreen> {
                 );
               },
             ),
-
-            // 2) Opción “Viajes pasados”
+            ListTile(
+              leading: const Icon(Icons.search),
+              title: const Text('Viajes pendientes'),
+              onTap: () {
+                Navigator.pop(context);
+                Navigator.pushNamed(context, '/rides/pending');
+              },
+            ),
             ListTile(
               leading: const Icon(Icons.history),
               title: const Text('Viajes pasados'),
@@ -144,10 +215,7 @@ class _DriverHomeScreenState extends State<DriverHomeScreen> {
                 );
               },
             ),
-
             const Divider(),
-
-            // 3) Cerrar sesión
             ListTile(
               leading: const Icon(Icons.logout),
               title: const Text('Cerrar sesión'),
@@ -164,50 +232,24 @@ class _DriverHomeScreenState extends State<DriverHomeScreen> {
                 child: _assignedRides.isEmpty
                     ? const Center(
                         child: Text(
-                          'No hay viajes asignados en este momento.',
+                          'No hay viajes activos por atender.',
                           style: TextStyle(fontSize: 18),
                         ),
                       )
-                    : ListView.builder(
-                        itemCount: _assignedRides.length,
-                        itemBuilder: (context, index) {
-                          final ride =
-                              _assignedRides[index] as Map<String, dynamic>;
-                          final origin =
-                              ride['origin'] as String? ?? 'Origen desconocido';
-                          final destination = ride['destination'] as String? ??
-                              'Destino desconocido';
-                          final rideId = ride['id'];
-
-                          return Card(
-                            margin: const EdgeInsets.symmetric(vertical: 8),
-                            elevation: 2,
-                            child: ListTile(
-                              title: Text('Viaje #$rideId'),
-                              subtitle: Column(
-                                crossAxisAlignment: CrossAxisAlignment.start,
-                                children: [
-                                  const SizedBox(height: 4),
-                                  Text('Origen: $origin'),
-                                  Text('Destino: $destination'),
-                                ],
-                              ),
-                              trailing: ElevatedButton(
-                                onPressed: () {
-                                  // Aquí podrías navegar a una pantalla de detalles de viaje
-                                  // por ejemplo: RideDetailScreen(rideId: rideId)
-                                  ScaffoldMessenger.of(context).showSnackBar(
-                                    SnackBar(
-                                        content: Text('Ir al viaje #$rideId')),
-                                  );
-                                },
-                                style: ElevatedButton.styleFrom(
-                                  backgroundColor: const Color(0xFF73003C),
-                                ),
-                                child: const Text('Ver detalles'),
-                              ),
+                    : FutureBuilder(
+                        // 👈 Si SÍ hay viaje, entra aquí y manda al mapa
+                        future: Future.delayed(Duration.zero, () {
+                          Navigator.pushReplacement(
+                            context,
+                            MaterialPageRoute(
+                              builder: (_) =>
+                                  RideDetailsScreen(ride: _assignedRides[0]),
                             ),
                           );
+                        }),
+                        builder: (context, snapshot) {
+                          return const Center(
+                              child: CircularProgressIndicator());
                         },
                       ),
               ),

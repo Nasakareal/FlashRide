@@ -62,14 +62,18 @@ class _EditDriverScreenState extends State<EditDriverScreen> {
     );
 
     setState(() => _isLoading = false);
+
+    if (!mounted) return;
+
     if (res.statusCode == 200) {
       Navigator.pop(context, true);
     } else if (res.statusCode == 422) {
       final err = jsonDecode(res.body);
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
-            content: Text(
-                'Error de validación: ${err['message'] ?? 'Campo inválido'}')),
+          content: Text(
+              'Error de validación: ${err['message'] ?? 'Campo inválido'}'),
+        ),
       );
     } else {
       ScaffoldMessenger.of(context).showSnackBar(

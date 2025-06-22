@@ -8,12 +8,14 @@ import 'screens/shared/welcome_screen.dart';
 
 // Pasajero
 import 'screens/passenger/request_ride.dart';
+import 'screens/passenger/passenger_home_screen.dart';
 
 // Chofer
 import 'screens/driver/driver_home_screen.dart';
 import 'screens/driver/pending_rides.dart';
 import 'screens/driver/profile_screen.dart';
 import 'screens/driver/past_rides_screen.dart';
+import 'screens/driver/ride_details_screen.dart';
 
 // Admin
 import 'screens/admin/admin_home_screen.dart';
@@ -39,6 +41,7 @@ class FlashRideApp extends StatelessWidget {
         colorScheme: ColorScheme.fromSeed(seedColor: Colors.deepPurple),
         useMaterial3: true,
       ),
+
       // Página inicial
       home: const HomePage(),
 
@@ -52,6 +55,7 @@ class FlashRideApp extends StatelessWidget {
 
         // Pasajero
         '/ride/request': (_) => const RequestRideScreen(),
+        '/passenger_home': (_) => const PassengerHomeScreen(),
 
         // Chofer
         '/driver_home': (_) => const DriverHomeScreen(),

@@ -48,6 +48,8 @@ class _ShowDriverScreenState extends State<ShowDriverScreen> {
       });
     } else {
       setState(() => _isLoading = false);
+      if (!mounted) return;
+
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('Error al cargar detalles')),
       );

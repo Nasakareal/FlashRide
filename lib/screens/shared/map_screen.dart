@@ -81,6 +81,7 @@ class _MapScreenState extends State<MapScreen> {
 
     final resp = await http.get(url);
     final data = json.decode(resp.body);
+
     if (data['status'] == 'OK') {
       final loc = data['results'][0]['geometry']['location'];
       final newPos = LatLng(loc['lat'], loc['lng']);
@@ -90,6 +91,8 @@ class _MapScreenState extends State<MapScreen> {
         _setupMarkers();
       });
     } else {
+      if (!mounted) return;
+
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('Dirección no encontrada')),
       );
@@ -130,7 +133,6 @@ class _MapScreenState extends State<MapScreen> {
       );
       return;
     }
-    // TODO: Llamar a tu backend Laravel pasando _destination.latitude/lng
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(content: Text('Viaje solicitado a: $_destination')),
     );

@@ -1,5 +1,6 @@
 // ------------- imports -------------
 import 'dart:convert';
+import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:google_maps_flutter/google_maps_flutter.dart';
 import 'package:geolocator/geolocator.dart';
@@ -32,15 +33,28 @@ class _State extends State<PassengerHomeScreen> {
   final _sugs = <_Sug>[];
   bool _loadingSugs = false;
 
+  BitmapDescriptor? _taxiIcon;
+
   /* ---------- ciclo ---------- */
+  late final Timer _timerConductores;
+
   @override
   void initState() {
     super.initState();
-    _locate();
+
+    _loadTaxiIcon() // ① Carga el ícono con Size(48,48)
+        .then((_) {
+      _locate().then((_) => _cargarConductoresCercanos());
+      _timerConductores = Timer.periodic(
+        const Duration(seconds: 10),
+        (_) => _cargarConductoresCercanos(),
+      );
+    });
   }
 
   @override
   void dispose() {
+    _timerConductores.cancel();
     _map?.dispose();
     _searchCtl.dispose();
     super.dispose();
@@ -49,15 +63,23 @@ class _State extends State<PassengerHomeScreen> {
   /* ---------- GPS ---------- */
   Future<void> _locate() async {
     try {
-      if (!await Geolocator.isLocationServiceEnabled())
+      if (!await Geolocator.isLocationServiceEnabled()) {
         return setState(() => _me = _fallback);
+      }
+
       var p = await Geolocator.checkPermission();
-      if (p == LocationPermission.denied)
+
+      if (p == LocationPermission.denied) {
         p = await Geolocator.requestPermission();
+      }
+
       if (p == LocationPermission.denied ||
-          p == LocationPermission.deniedForever)
+          p == LocationPermission.deniedForever) {
         return setState(() => _me = _fallback);
+      }
+
       final pos = await Geolocator.getCurrentPosition();
+
       setState(() {
         _me = LatLng(pos.latitude, pos.longitude);
         _paint();
@@ -102,22 +124,59 @@ class _State extends State<PassengerHomeScreen> {
 
   /* ---------- markers ---------- */
   void _paint() {
-    _markers
-      ..clear()
-      ..addIf(
-          _me != null,
-          () => Marker(
-              markerId: const MarkerId('me'),
-              position: _me!,
-              icon: BitmapDescriptor.defaultMarkerWithHue(
-                  BitmapDescriptor.hueAzure)))
-      ..addIf(
-          _dest != null,
-          () => Marker(
-              markerId: const MarkerId('dest'),
-              position: _dest!,
-              icon: BitmapDescriptor.defaultMarkerWithHue(
-                  BitmapDescriptor.hueGreen)));
+    _markers.removeWhere((m) => m.markerId.value == 'dest');
+
+    if (_dest != null) {
+      _markers.add(Marker(
+        markerId: const MarkerId('dest'),
+        position: _dest!,
+        icon: BitmapDescriptor.defaultMarkerWithHue(BitmapDescriptor.hueGreen),
+      ));
+    }
+  }
+
+  Future<void> _solicitarViaje() async {
+    final prefs = await SharedPreferences.getInstance();
+    final token = prefs.getString('token') ?? '';
+
+    debugPrint('🧪 TOKEN USADO PARA RIDE => $token');
+
+    if (_me == null || _dest == null) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Ubicación actual o destino no definido.'),
+        ),
+      );
+      return;
+    }
+
+    final response = await http.post(
+      Uri.parse('http://158.23.170.129/api/rides'),
+      headers: {
+        'Authorization': 'Bearer $token',
+        'Content-Type': 'application/json',
+      },
+      body: jsonEncode({
+        'start_lat': _me!.latitude,
+        'start_lng': _me!.longitude,
+        'end_lat': _dest!.latitude,
+        'end_lng': _dest!.longitude,
+      }),
+    );
+
+    if (!mounted) return;
+
+    if (response.statusCode == 201) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Viaje solicitado con éxito')),
+      );
+    } else {
+      debugPrint('❌ ERROR => ${response.statusCode} / ${response.body}');
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Error al solicitar viaje: ${response.body}')),
+      );
+    }
   }
 
   /* ---------- UI ---------- */
@@ -193,17 +252,7 @@ class _State extends State<PassengerHomeScreen> {
             child: SizedBox(
                 width: double.infinity,
                 child: ElevatedButton(
-                    onPressed: () {
-                      if (_dest == null) {
-                        ScaffoldMessenger.of(context).showSnackBar(
-                            const SnackBar(
-                                content:
-                                    Text('Selecciona un destino primero')));
-                        return;
-                      }
-                      ScaffoldMessenger.of(context).showSnackBar(
-                          SnackBar(content: Text('Viaje solicitado a $_dest')));
-                    },
+                    onPressed: _solicitarViaje,
                     style: ElevatedButton.styleFrom(
                         backgroundColor: Colors.green[700],
                         padding: const EdgeInsets.symmetric(vertical: 16),
@@ -211,6 +260,78 @@ class _State extends State<PassengerHomeScreen> {
                             borderRadius: BorderRadius.circular(24))),
                     child: const Text('Solicitar viaje aquí'))))
       ])),
+    );
+  }
+
+  Future<void> _loadTaxiIcon() async {
+    _taxiIcon = await BitmapDescriptor.fromAssetImage(
+      const ImageConfiguration(size: Size(48, 48)),
+      'assets/images/taxi32.png',
+    );
+    if (mounted) setState(() {});
+  }
+
+  Future<void> _cargarConductoresCercanos() async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final token = prefs.getString('token') ?? '';
+      final res = await http.get(
+        Uri.parse('http://158.23.170.129/api/drivers/nearby'),
+        headers: {'Authorization': 'Bearer $token'},
+      );
+      if (res.statusCode != 200) return;
+
+      final data = jsonDecode(res.body) as List;
+
+      // <-- Aquí es donde metes el nuevosDrivers
+      final nuevosDrivers = data
+          .map((d) {
+            final lat = double.tryParse(d['lat'].toString());
+            final lng = double.tryParse(d['lng'].toString());
+            if (lat == null || lng == null) return null;
+            return Marker(
+              markerId: MarkerId('driver_${d['id']}'),
+              position: LatLng(lat, lng),
+              icon: _taxiIcon ??
+                  BitmapDescriptor.defaultMarkerWithHue(
+                      BitmapDescriptor.hueOrange),
+              infoWindow: InfoWindow(title: 'Unidad: ${d['name']}'),
+            );
+          })
+          .whereType<Marker>()
+          .toSet();
+
+      if (!mounted) return;
+      setState(() {
+        // 1) quito todos los viejos
+        _markers.removeWhere((m) => m.markerId.value.startsWith('driver_'));
+        // 2) añado los nuevos
+        _markers.addAll(nuevosDrivers);
+        // 3) (opcional) tu destino
+        if (_dest != null) {
+          _markers.removeWhere((m) => m.markerId.value == 'dest');
+          _markers.add(Marker(
+            markerId: const MarkerId('dest'),
+            position: _dest!,
+            icon: BitmapDescriptor.defaultMarkerWithHue(
+                BitmapDescriptor.hueGreen),
+          ));
+        }
+      });
+    } catch (e) {
+      debugPrint('❌ Error cargando conductores: $e');
+    }
+  }
+
+  LatLngBounds _getBoundsFromMarkers(Set<Marker> markers) {
+    final latitudes = markers.map((m) => m.position.latitude);
+    final longitudes = markers.map((m) => m.position.longitude);
+
+    return LatLngBounds(
+      southwest: LatLng(latitudes.reduce((a, b) => a < b ? a : b),
+          longitudes.reduce((a, b) => a < b ? a : b)),
+      northeast: LatLng(latitudes.reduce((a, b) => a > b ? a : b),
+          longitudes.reduce((a, b) => a > b ? a : b)),
     );
   }
 }
