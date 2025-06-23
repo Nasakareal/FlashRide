@@ -88,6 +88,35 @@ class _RideDetailsScreenState extends State<RideDetailsScreen> {
     }
   }
 
+  Future<void> _cambiarEstado(String nuevoEstado) async {
+    final rideId = widget.ride['id'];
+    final url = Uri.parse('http://158.23.170.129/api/rides/$rideId/status');
+
+    try {
+      final res = await http.post(
+        url,
+        headers: {'Content-Type': 'application/json'},
+        body: jsonEncode({'status': nuevoEstado}),
+      );
+
+      if (res.statusCode == 200) {
+        if (!mounted) return;
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Estado cambiado a $nuevoEstado')),
+        );
+        Navigator.pop(context);
+      } else {
+        throw Exception(res.body);
+      }
+    } catch (e) {
+      debugPrint('❌ Error al cambiar estado: $e');
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Error: $e')),
+      );
+    }
+  }
+
   List<LatLng> _decodePolyline(String encoded) {
     List<LatLng> points = [];
     int index = 0, len = encoded.length;
@@ -126,16 +155,45 @@ class _RideDetailsScreenState extends State<RideDetailsScreen> {
       appBar: AppBar(title: const Text('Ruta del viaje')),
       body: _myPos == null
           ? const Center(child: CircularProgressIndicator())
-          : GoogleMap(
-              initialCameraPosition: CameraPosition(
-                target: _myPos!,
-                zoom: 14,
-              ),
-              onMapCreated: (controller) => _mapController = controller,
-              markers: _markers,
-              polylines: _polylines,
-              myLocationEnabled: true,
-              myLocationButtonEnabled: true,
+          : Column(
+              children: [
+                Expanded(
+                  child: GoogleMap(
+                    initialCameraPosition: CameraPosition(
+                      target: _myPos!,
+                      zoom: 14,
+                    ),
+                    onMapCreated: (controller) => _mapController = controller,
+                    markers: _markers,
+                    polylines: _polylines,
+                    myLocationEnabled: true,
+                    myLocationButtonEnabled: true,
+                  ),
+                ),
+                Padding(
+                  padding: const EdgeInsets.all(12),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                    children: [
+                      if (widget.ride['status'] == 'pending')
+                        ElevatedButton(
+                          onPressed: () => _cambiarEstado('accepted'),
+                          child: const Text('Aceptar viaje'),
+                        ),
+                      if (widget.ride['status'] == 'accepted')
+                        ElevatedButton(
+                          onPressed: () => _cambiarEstado('in_progress'),
+                          child: const Text('Comenzar viaje'),
+                        ),
+                      if (widget.ride['status'] == 'in_progress')
+                        ElevatedButton(
+                          onPressed: () => _cambiarEstado('completed'),
+                          child: const Text('Finalizar viaje'),
+                        ),
+                    ],
+                  ),
+                ),
+              ],
             ),
     );
   }

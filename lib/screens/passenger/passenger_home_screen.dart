@@ -35,6 +35,8 @@ class _State extends State<PassengerHomeScreen> {
 
   BitmapDescriptor? _taxiIcon;
 
+  String _nombre = 'Pasajero';
+
   /* ---------- ciclo ---------- */
   late final Timer _timerConductores;
 
@@ -42,8 +44,9 @@ class _State extends State<PassengerHomeScreen> {
   void initState() {
     super.initState();
 
-    _loadTaxiIcon() // ① Carga el ícono con Size(48,48)
-        .then((_) {
+    _cargarNombreUsuario();
+
+    _loadTaxiIcon().then((_) {
       _locate().then((_) => _cargarConductoresCercanos());
       _timerConductores = Timer.periodic(
         const Duration(seconds: 10),
@@ -135,6 +138,66 @@ class _State extends State<PassengerHomeScreen> {
     }
   }
 
+  Future<void> _estimarCosto() async {
+    final prefs = await SharedPreferences.getInstance();
+    final token = prefs.getString('token') ?? '';
+
+    if (_me == null || _dest == null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+            content: Text('Ubicación actual o destino no definido.')),
+      );
+      return;
+    }
+
+    final response = await http.post(
+      Uri.parse('http://158.23.170.129/api/rides/estimate'),
+      headers: {
+        'Authorization': 'Bearer $token',
+        'Content-Type': 'application/json',
+      },
+      body: jsonEncode({
+        'start_lat': _me!.latitude,
+        'start_lng': _me!.longitude,
+        'end_lat': _dest!.latitude,
+        'end_lng': _dest!.longitude,
+      }),
+    );
+
+    if (response.statusCode != 200) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Error al estimar el costo.')),
+      );
+      return;
+    }
+
+    final data = jsonDecode(response.body);
+    final cost = data['estimated_cost'];
+    final distance = data['distance_km'];
+
+    showDialog(
+      context: context,
+      builder: (_) => AlertDialog(
+        title: const Text('Costo estimado'),
+        content: Text('El viaje cuesta aproximadamente \$${cost.toString()} '
+            'por ${distance.toString()} km. ¿Deseas continuar?'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('Cancelar'),
+          ),
+          ElevatedButton(
+            onPressed: () {
+              Navigator.pop(context);
+              _solicitarViaje();
+            },
+            child: const Text('Confirmar'),
+          ),
+        ],
+      ),
+    );
+  }
+
   Future<void> _solicitarViaje() async {
     final prefs = await SharedPreferences.getInstance();
     final token = prefs.getString('token') ?? '';
@@ -184,7 +247,7 @@ class _State extends State<PassengerHomeScreen> {
   Widget build(BuildContext ctx) {
     return Scaffold(
       appBar: AppBar(
-          title: const Text('Bienvenido, Pasajero'),
+          title: Text('Bienvenido, $_nombre'),
           leading: Builder(
               builder: (c) => IconButton(
                   icon: const Icon(Icons.menu),
@@ -192,7 +255,7 @@ class _State extends State<PassengerHomeScreen> {
       drawer: Drawer(
           child: ListView(padding: EdgeInsets.zero, children: [
         const DrawerHeader(
-            decoration: BoxDecoration(color: Colors.green),
+            decoration: BoxDecoration(color: Color.fromARGB(255, 115, 0, 60)),
             child: Text('Menú',
                 style: TextStyle(color: Colors.white, fontSize: 24))),
         ListTile(
@@ -252,22 +315,31 @@ class _State extends State<PassengerHomeScreen> {
             child: SizedBox(
                 width: double.infinity,
                 child: ElevatedButton(
-                    onPressed: _solicitarViaje,
+                    onPressed: _estimarCosto,
                     style: ElevatedButton.styleFrom(
-                        backgroundColor: Colors.green[700],
+                        backgroundColor: const Color.fromARGB(255, 115, 0, 60),
                         padding: const EdgeInsets.symmetric(vertical: 16),
                         shape: RoundedRectangleBorder(
                             borderRadius: BorderRadius.circular(24))),
-                    child: const Text('Solicitar viaje aquí'))))
+                    child: const Text(
+                      'Solicitar viaje aquí',
+                      style: TextStyle(color: Colors.white),
+                    ))))
       ])),
     );
   }
 
   Future<void> _loadTaxiIcon() async {
-    _taxiIcon = await BitmapDescriptor.fromAssetImage(
-      const ImageConfiguration(size: Size(48, 48)),
-      'assets/images/taxi32.png',
-    );
+    try {
+      _taxiIcon = await BitmapDescriptor.fromAssetImage(
+        const ImageConfiguration(size: Size(48, 48)),
+        'assets/images/taxi32.png',
+      );
+      debugPrint('✅ Ícono personalizado cargado correctamente.');
+    } catch (e) {
+      debugPrint('❌ Error cargando ícono personalizado: $e');
+    }
+
     if (mounted) setState(() {});
   }
 
@@ -275,16 +347,30 @@ class _State extends State<PassengerHomeScreen> {
     try {
       final prefs = await SharedPreferences.getInstance();
       final token = prefs.getString('token') ?? '';
+
       final res = await http.get(
         Uri.parse('http://158.23.170.129/api/drivers/nearby'),
         headers: {'Authorization': 'Bearer $token'},
       );
-      if (res.statusCode != 200) return;
+
+      debugPrint('📡 Respuesta nearbyDrivers => ${res.statusCode}');
+      debugPrint('📦 Body => ${res.body}');
+
+      if (res.statusCode != 200) {
+        debugPrint('❌ Error: No se pudo obtener conductores.');
+        return;
+      }
 
       final data = jsonDecode(res.body) as List;
 
-      // <-- Aquí es donde metes el nuevosDrivers
+      debugPrint('🧭 Conductores recibidos: ${data.length}');
+      for (var d in data) {
+        debugPrint(
+            '🧍‍♂️ ${d['name']} => ${d['lat']}, ${d['lng']} (online: ${d['is_online']})');
+      }
+
       final nuevosDrivers = data
+          .where((d) => d['lat'] != null && d['lng'] != null)
           .map((d) {
             final lat = double.tryParse(d['lat'].toString());
             final lng = double.tryParse(d['lng'].toString());
@@ -302,19 +388,19 @@ class _State extends State<PassengerHomeScreen> {
           .toSet();
 
       if (!mounted) return;
+
       setState(() {
-        // 1) quito todos los viejos
         _markers.removeWhere((m) => m.markerId.value.startsWith('driver_'));
-        // 2) añado los nuevos
         _markers.addAll(nuevosDrivers);
-        // 3) (opcional) tu destino
+
         if (_dest != null) {
           _markers.removeWhere((m) => m.markerId.value == 'dest');
           _markers.add(Marker(
             markerId: const MarkerId('dest'),
             position: _dest!,
             icon: BitmapDescriptor.defaultMarkerWithHue(
-                BitmapDescriptor.hueGreen),
+              BitmapDescriptor.hueOrange,
+            ),
           ));
         }
       });
@@ -333,6 +419,16 @@ class _State extends State<PassengerHomeScreen> {
       northeast: LatLng(latitudes.reduce((a, b) => a > b ? a : b),
           longitudes.reduce((a, b) => a > b ? a : b)),
     );
+  }
+
+  Future<void> _cargarNombreUsuario() async {
+    final prefs = await SharedPreferences.getInstance();
+    final nombre = prefs.getString('name') ?? 'Pasajero';
+    if (mounted) {
+      setState(() {
+        _nombre = nombre;
+      });
+    }
   }
 }
 
