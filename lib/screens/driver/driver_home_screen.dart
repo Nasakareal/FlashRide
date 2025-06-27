@@ -9,6 +9,10 @@ import '../shared/welcome_screen.dart';
 import 'profile_screen.dart';
 import 'past_rides_screen.dart';
 import 'ride_details_screen.dart';
+import 'ride_awaiting_screen.dart';
+import 'ride_pickup_screen.dart';
+import 'ride_inprogress_screen.dart';
+import 'ride_completed_screen.dart';
 
 class DriverHomeScreen extends StatefulWidget {
   const DriverHomeScreen({super.key});
@@ -42,6 +46,22 @@ class _DriverHomeScreenState extends State<DriverHomeScreen> {
   void dispose() {
     _locationTimer?.cancel(); // ⬅️ Cancelar al cerrar pantalla
     super.dispose();
+  }
+
+  Widget _getRideScreen(Map<String, dynamic> ride) {
+    final fase = ride['fase'];
+    switch (fase) {
+      case 'esperando':
+        return RideAwaitingScreen(ride: ride);
+      case 'recogiendo':
+        return RidePickupScreen(ride: ride);
+      case 'viajando':
+        return RideInProgressScreen(ride: ride);
+      case 'completado':
+        return RideCompletedScreen(ride: ride);
+      default:
+        return RideDetailsScreen(ride: ride);
+    }
   }
 
   Future<void> _enviarUbicacionGlobal() async {
@@ -237,13 +257,11 @@ class _DriverHomeScreenState extends State<DriverHomeScreen> {
                         ),
                       )
                     : FutureBuilder(
-                        // 👈 Si SÍ hay viaje, entra aquí y manda al mapa
                         future: Future.delayed(Duration.zero, () {
                           Navigator.pushReplacement(
                             context,
                             MaterialPageRoute(
-                              builder: (_) =>
-                                  RideDetailsScreen(ride: _assignedRides[0]),
+                              builder: (_) => _getRideScreen(_assignedRides[0]),
                             ),
                           );
                         }),

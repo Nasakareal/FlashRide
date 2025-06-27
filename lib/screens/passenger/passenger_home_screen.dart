@@ -7,6 +7,11 @@ import 'package:geolocator/geolocator.dart';
 import 'package:http/http.dart' as http;
 import 'package:shared_preferences/shared_preferences.dart';
 import '../shared/welcome_screen.dart';
+import 'ride_awaiting_screen.dart';
+import 'ride_pickup_screen.dart';
+import 'ride_inprogress_screen.dart';
+import 'ride_completed_screen.dart';
+import 'ride_details_screen.dart';
 
 // ------------ constantes ------------
 const _apiKey = 'AIzaSyAunhRNSucPlDvMPIAdah7pERRg-pJfKZw';
@@ -40,17 +45,30 @@ class _State extends State<PassengerHomeScreen> {
   /* ---------- ciclo ---------- */
   late final Timer _timerConductores;
 
+  late final Future<Map<String, dynamic>?> _viajeEnCursoFuture;
+
+  late final Timer _timerRideWatcher;
+
   @override
   void initState() {
     super.initState();
 
     _cargarNombreUsuario();
+    _viajeEnCursoFuture =
+        _cargarViajeEnCurso(); // 1ª consulta (para el FutureBuilder)
+
+    // 🔥  Arrancamos el watcher
+    _timerRideWatcher =
+        Timer.periodic(const Duration(seconds: 3), (_) => _checkRide());
 
     _loadTaxiIcon().then((_) {
       _locate().then((_) => _cargarConductoresCercanos());
       _timerConductores = Timer.periodic(
         const Duration(seconds: 10),
-        (_) => _cargarConductoresCercanos(),
+        (_) {
+          _locate();
+          _cargarConductoresCercanos();
+        },
       );
     });
   }
@@ -58,6 +76,7 @@ class _State extends State<PassengerHomeScreen> {
   @override
   void dispose() {
     _timerConductores.cancel();
+    _timerRideWatcher.cancel();
     _map?.dispose();
     _searchCtl.dispose();
     super.dispose();
@@ -71,7 +90,6 @@ class _State extends State<PassengerHomeScreen> {
       }
 
       var p = await Geolocator.checkPermission();
-
       if (p == LocationPermission.denied) {
         p = await Geolocator.requestPermission();
       }
@@ -87,6 +105,13 @@ class _State extends State<PassengerHomeScreen> {
         _me = LatLng(pos.latitude, pos.longitude);
         _paint();
       });
+
+      // 👇🔥 ESTA ES LA PARTE CRUCIAL que mueve la cámara
+      if (_map != null && _me != null) {
+        _map!.animateCamera(
+          CameraUpdate.newLatLng(_me!),
+        );
+      }
     } catch (_) {
       setState(() => _me = _fallback);
     }
@@ -244,88 +269,134 @@ class _State extends State<PassengerHomeScreen> {
 
   /* ---------- UI ---------- */
   @override
-  Widget build(BuildContext ctx) {
-    return Scaffold(
-      appBar: AppBar(
-          title: Text('Bienvenido, $_nombre'),
-          leading: Builder(
+  Widget build(BuildContext context) {
+    return FutureBuilder<Map<String, dynamic>?>(
+      future: _viajeEnCursoFuture,
+      builder: (context, snapshot) {
+        if (snapshot.connectionState != ConnectionState.done) {
+          return const Scaffold(
+            body: Center(child: CircularProgressIndicator()),
+          );
+        }
+
+        final ride = snapshot.data;
+        if (ride != null && ride['fase'] != null) {
+          return _getRideScreen(ride);
+        }
+
+        return Scaffold(
+          appBar: AppBar(
+            title: Text('Bienvenido, $_nombre'),
+            leading: Builder(
               builder: (c) => IconButton(
-                  icon: const Icon(Icons.menu),
-                  onPressed: () => Scaffold.of(c).openDrawer()))),
-      drawer: Drawer(
-          child: ListView(padding: EdgeInsets.zero, children: [
-        const DrawerHeader(
-            decoration: BoxDecoration(color: Color.fromARGB(255, 115, 0, 60)),
-            child: Text('Menú',
-                style: TextStyle(color: Colors.white, fontSize: 24))),
-        ListTile(
-            leading: const Icon(Icons.logout),
-            title: const Text('Cerrar sesión'),
-            onTap: () async {
-              final p = await SharedPreferences.getInstance();
-              await p.clear();
-              if (!mounted) return;
-              Navigator.pushAndRemoveUntil(
-                  context,
-                  MaterialPageRoute(builder: (_) => const WelcomeScreen()),
-                  (_) => false);
-            }),
-      ])),
-      body: SafeArea(
-          child: Column(children: [
-        /* buscador + lista */
-        Padding(
-            padding: const EdgeInsets.all(8),
-            child: Column(children: [
-              TextField(
-                  controller: _searchCtl,
-                  decoration: InputDecoration(
-                      prefixIcon: const Icon(Icons.search),
-                      hintText: 'Buscar dirección…',
-                      border: OutlineInputBorder(
-                          borderRadius: BorderRadius.circular(8))),
-                  onChanged: _askSug),
-              if (_loadingSugs) const LinearProgressIndicator(minHeight: 2),
-              ..._sugs.map((s) => ListTile(
-                  dense: true,
-                  title: Text(s.desc, overflow: TextOverflow.ellipsis),
-                  onTap: () => _pickSug(s)))
-            ])),
-        /* mapa */
-        Expanded(
-            child: Container(
-                margin: const EdgeInsets.symmetric(horizontal: 8),
-                decoration: BoxDecoration(
-                    border: Border.all(color: Colors.grey.shade300),
-                    borderRadius: BorderRadius.circular(8)),
-                clipBehavior: Clip.hardEdge,
-                child: GoogleMap(
-                    onMapCreated: (c) {
-                      _map = c;
-                      _paint();
-                    },
-                    initialCameraPosition:
-                        CameraPosition(target: _me ?? _fallback, zoom: 15),
-                    myLocationEnabled: true,
-                    zoomControlsEnabled: false,
-                    markers: _markers))),
-        /* botón */
-        Padding(
-            padding: const EdgeInsets.all(12),
-            child: SizedBox(
-                width: double.infinity,
-                child: ElevatedButton(
-                    onPressed: _estimarCosto,
-                    style: ElevatedButton.styleFrom(
+                icon: const Icon(Icons.menu),
+                onPressed: () => Scaffold.of(c).openDrawer(),
+              ),
+            ),
+          ),
+          drawer: Drawer(
+            child: ListView(
+              padding: EdgeInsets.zero,
+              children: [
+                const DrawerHeader(
+                  decoration:
+                      BoxDecoration(color: Color.fromARGB(255, 115, 0, 60)),
+                  child: Text('Menú',
+                      style: TextStyle(color: Colors.white, fontSize: 24)),
+                ),
+                ListTile(
+                  leading: const Icon(Icons.logout),
+                  title: const Text('Cerrar sesión'),
+                  onTap: () async {
+                    final p = await SharedPreferences.getInstance();
+                    await p.clear();
+                    if (!mounted) return;
+                    Navigator.pushAndRemoveUntil(
+                      context,
+                      MaterialPageRoute(builder: (_) => const WelcomeScreen()),
+                      (_) => false,
+                    );
+                  },
+                ),
+              ],
+            ),
+          ),
+          body: SafeArea(
+            child: Column(
+              children: [
+                Padding(
+                  padding: const EdgeInsets.all(8),
+                  child: Column(
+                    children: [
+                      TextField(
+                        controller: _searchCtl,
+                        decoration: InputDecoration(
+                          prefixIcon: const Icon(Icons.search),
+                          hintText: 'Buscar dirección…',
+                          border: OutlineInputBorder(
+                              borderRadius: BorderRadius.circular(8)),
+                        ),
+                        onChanged: _askSug,
+                      ),
+                      if (_loadingSugs)
+                        const LinearProgressIndicator(minHeight: 2),
+                      ..._sugs.map((s) => ListTile(
+                            dense: true,
+                            title:
+                                Text(s.desc, overflow: TextOverflow.ellipsis),
+                            onTap: () => _pickSug(s),
+                          )),
+                    ],
+                  ),
+                ),
+                Expanded(
+                  child: Container(
+                    margin: const EdgeInsets.symmetric(horizontal: 8),
+                    decoration: BoxDecoration(
+                      border: Border.all(color: Colors.grey.shade300),
+                      borderRadius: BorderRadius.circular(8),
+                    ),
+                    clipBehavior: Clip.hardEdge,
+                    child: GoogleMap(
+                      onMapCreated: (c) {
+                        _map = c;
+                        _paint();
+                      },
+                      initialCameraPosition: CameraPosition(
+                        target: _me ?? _fallback,
+                        zoom: 15,
+                      ),
+                      myLocationEnabled: true,
+                      zoomControlsEnabled: false,
+                      markers: _markers,
+                    ),
+                  ),
+                ),
+                Padding(
+                  padding: const EdgeInsets.all(12),
+                  child: SizedBox(
+                    width: double.infinity,
+                    child: ElevatedButton(
+                      onPressed: _estimarCosto,
+                      style: ElevatedButton.styleFrom(
                         backgroundColor: const Color.fromARGB(255, 115, 0, 60),
                         padding: const EdgeInsets.symmetric(vertical: 16),
                         shape: RoundedRectangleBorder(
-                            borderRadius: BorderRadius.circular(24))),
-                    child: const Text(
-                      'Solicitar viaje aquí',
-                      style: TextStyle(color: Colors.white),
-                    ))))
-      ])),
+                          borderRadius: BorderRadius.circular(24),
+                        ),
+                      ),
+                      child: const Text(
+                        'Solicitar viaje aquí',
+                        style: TextStyle(color: Colors.white),
+                      ),
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        );
+      },
     );
   }
 
@@ -409,18 +480,6 @@ class _State extends State<PassengerHomeScreen> {
     }
   }
 
-  LatLngBounds _getBoundsFromMarkers(Set<Marker> markers) {
-    final latitudes = markers.map((m) => m.position.latitude);
-    final longitudes = markers.map((m) => m.position.longitude);
-
-    return LatLngBounds(
-      southwest: LatLng(latitudes.reduce((a, b) => a < b ? a : b),
-          longitudes.reduce((a, b) => a < b ? a : b)),
-      northeast: LatLng(latitudes.reduce((a, b) => a > b ? a : b),
-          longitudes.reduce((a, b) => a > b ? a : b)),
-    );
-  }
-
   Future<void> _cargarNombreUsuario() async {
     final prefs = await SharedPreferences.getInstance();
     final nombre = prefs.getString('name') ?? 'Pasajero';
@@ -428,6 +487,53 @@ class _State extends State<PassengerHomeScreen> {
       setState(() {
         _nombre = nombre;
       });
+    }
+  }
+
+  Future<Map<String, dynamic>?> _cargarViajeEnCurso() async {
+    final prefs = await SharedPreferences.getInstance();
+    final token = prefs.getString('token') ?? '';
+
+    final res = await http.get(
+      Uri.parse('http://158.23.170.129/api/rides/active'),
+      headers: {'Authorization': 'Bearer $token'},
+    );
+
+    debugPrint('⏪ /rides/active => ${res.statusCode}');
+    debugPrint('⏪ BODY          => ${res.body}');
+
+    if (res.statusCode != 200) return null;
+
+    final data = jsonDecode(res.body);
+    if (data['fase'] != null) return data;
+    return null;
+  }
+
+  Future<void> _checkRide() async {
+    final ride = await _cargarViajeEnCurso();
+    debugPrint('🔄 RideWatcher => $ride');
+    if (!mounted) return;
+
+    if (ride != null && ride['fase'] != null) {
+      Navigator.of(context).pushReplacement(
+        MaterialPageRoute(builder: (_) => _getRideScreen(ride)),
+      );
+    }
+  }
+
+  Widget _getRideScreen(Map<String, dynamic> ride) {
+    final fase = ride['fase'];
+    switch (fase) {
+      case 'esperando':
+        return RideAwaitingScreen(ride: ride);
+      case 'recogiendo':
+        return PassengerPickupScreen(ride: ride);
+      case 'viajando':
+        return RideInProgressScreen(ride: ride);
+      case 'completado':
+        return RideCompletedScreen(ride: ride);
+      default:
+        return RideDetailsScreen(ride: ride);
     }
   }
 }

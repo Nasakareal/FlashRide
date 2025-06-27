@@ -2,6 +2,9 @@ import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
 import '../../services/auth_service.dart';
+import 'package:logging/logging.dart';
+
+final _log = Logger('PendingRidesScreen');
 
 class PendingRidesScreen extends StatefulWidget {
   const PendingRidesScreen({super.key});
@@ -30,7 +33,8 @@ class _PendingRidesScreenState extends State<PendingRidesScreen> {
       },
     );
 
-    print('RESPUESTA (${response.statusCode}): ${response.body}');
+    // antes: print('RESPUESTA ...');
+    _log.info('RESPUESTA (${response.statusCode}): ${response.body}');
 
     if (response.statusCode == 200) {
       final body = jsonDecode(response.body);
@@ -39,6 +43,7 @@ class _PendingRidesScreenState extends State<PendingRidesScreen> {
         _isLoading = false;
       });
     } else {
+      _log.warning('Error cargando rides: ${response.statusCode}');
       setState(() {
         _pendingRides = [];
         _isLoading = false;
@@ -55,6 +60,8 @@ class _PendingRidesScreenState extends State<PendingRidesScreen> {
         'Content-Type': 'application/json',
       },
     );
+
+    if (!mounted) return;
 
     if (response.statusCode == 200) {
       ScaffoldMessenger.of(context).showSnackBar(
