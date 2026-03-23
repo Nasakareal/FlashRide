@@ -74,6 +74,10 @@
 	<key>NSLocationWhenInUseUsageDescription</key>
 	<string>Usamos tu ubicación para mostrar viajes cercanos, calcular rutas y compartir la ubicación durante el servicio.</string>
 
+	<!-- Algunas librerías iOS de ubicación hacen referencia a permisos "always". -->
+	<key>NSLocationAlwaysAndWhenInUseUsageDescription</key>
+	<string>Usamos tu ubicación para mostrar viajes cercanos, calcular rutas y compartir la ubicación durante el servicio cuando la función esté habilitada.</string>
+
 	<!-- Cámara (SOLO si tomas fotos/evidencia) -->
 	<!--
 	<key>NSCameraUsageDescription</key>
