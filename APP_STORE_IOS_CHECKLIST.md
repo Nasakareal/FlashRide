@@ -9,6 +9,7 @@ Configuracion ya preparada en el proyecto:
 - Permiso de ubicacion ajustado a uso en primer plano
 - Integracion lista para Google Maps con `GMS_API_KEY` en los `.xcconfig`
 - `Podfile` agregado para instalar dependencias iOS correctamente
+- Deployment target iOS subido a `14.0` por compatibilidad con `google_maps_flutter_ios`
 
 Lo unico que falta completar antes de subir desde una Mac:
 
