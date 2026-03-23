@@ -40,12 +40,12 @@ class RideDetailsScreen extends StatelessWidget {
               myLocationButtonEnabled: true,
             ),
           ),
-          Padding(
-            padding: const EdgeInsets.all(16.0),
+          const Padding(
+            padding: EdgeInsets.all(16.0),
             child: Text(
               'Este viaje está en estado desconocido.\nRevisa con soporte si esto persiste.',
               textAlign: TextAlign.center,
-              style: const TextStyle(fontSize: 16, color: Colors.redAccent),
+              style: TextStyle(fontSize: 16, color: Colors.redAccent),
             ),
           ),
           Padding(

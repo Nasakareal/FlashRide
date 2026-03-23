@@ -43,7 +43,7 @@ class RideCompletedScreen extends StatelessWidget {
           const Padding(
             padding: EdgeInsets.all(16.0),
             child: Text(
-              'Tu viaje ha finalizado exitosamente.\nGracias por usar FlashRide.',
+              'Tu viaje ha finalizado exitosamente.\nGracias por usar Taxi Seguro.',
               textAlign: TextAlign.center,
               style: TextStyle(fontSize: 16),
             ),

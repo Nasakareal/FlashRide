@@ -1,5 +1,3 @@
-// lib/screens/admin/create_driver_screen.dart
-
 import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
 import 'dart:convert';
@@ -27,19 +25,12 @@ class _CreateDriverScreenState extends State<CreateDriverScreen> {
     final pwd = passwordController.text.trim();
     final pwdConfirm = confirmPasswordController.text.trim();
 
-    // 1) Validación local: contraseñas coinciden
     if (pwd != pwdConfirm) {
-      showDialog(
+      await showDialog(
         context: context,
-        builder: (_) => AlertDialog(
-          title: const Text('Error'),
-          content: const Text('Las contraseñas no coinciden.'),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.pop(context),
-              child: const Text('Cerrar'),
-            ),
-          ],
+        builder: (_) => const AlertDialog(
+          title: Text('Error'),
+          content: Text('Las contraseñas no coinciden.'),
         ),
       );
       return;
@@ -48,16 +39,17 @@ class _CreateDriverScreenState extends State<CreateDriverScreen> {
     setState(() => isLoading = true);
 
     try {
-      // 2) Obtengo token guardado
       final token = await AuthService.getToken();
-      debugPrint('🔑 Token obtenido: $token');
+      // Usa SIEMPRE la base del AuthService (HTTPS)
+      // Ojo: tu AuthService tenía algo como:
+      // static const _baseUrl = 'https://158.23.170.129/flashride/public/api';
+      final uri = Uri.parse('${AuthService.baseUrl}/drivers');
 
-      // 3) Llamo al endpoint POST /api/drivers
       final response = await http.post(
-        Uri.parse('http://158.23.170.129/api/drivers'),
+        uri,
         headers: {
           'Content-Type': 'application/json',
-          'Accept': 'application/json', // <<— Muy importante
+          'Accept': 'application/json',
           if (token != null) 'Authorization': 'Bearer $token',
         },
         body: jsonEncode({
@@ -68,81 +60,72 @@ class _CreateDriverScreenState extends State<CreateDriverScreen> {
         }),
       );
 
-      // 4) Imprimo status y body, antes de decodificar
-      debugPrint('🟢 Status Code: ${response.statusCode}');
-      debugPrint('🟢 Response Body: ${response.body}');
+      // Logs útiles
+      // debugPrint('Status: ${response.statusCode}');
+      // debugPrint('Body: ${response.body}');
 
-      // 5) Si fue 201, éxito
       if (response.statusCode == 201) {
         if (!mounted) return;
-        showDialog(
+        await showDialog(
           context: context,
-          builder: (_) => AlertDialog(
-            title: const Text('¡Éxito!'),
-            content: const Text('El chofer se ha registrado correctamente.'),
-            actions: [
-              TextButton(
-                onPressed: () {
-                  Navigator.pop(context); // cerrar diálogo
-                  Navigator.pop(context); // volver a AdminHome
-                },
-                child: const Text('Aceptar'),
-              ),
-            ],
+          builder: (_) => const AlertDialog(
+            title: Text('¡Éxito!'),
+            content: Text('El chofer se ha registrado correctamente.'),
           ),
         );
-      } else {
-        // 6) Si no es 201, trato de decodificar JSON para extraer errores
-        String message = 'Error desconocido';
-
-        try {
-          final body = jsonDecode(response.body);
-          if (body is Map<String, dynamic>) {
-            if (body['errors'] != null) {
-              final errs = (body['errors'] as Map<String, dynamic>)
-                  .values
-                  .expand((list) => list as List<dynamic>)
-                  .map((e) => e.toString())
-                  .join('\n');
-              message = errs;
-            } else if (body['message'] != null) {
-              message = body['message'];
-            }
-          }
-        } catch (_) {
-          // Si no es JSON, muestro la respuesta bruta
-          message = response.body;
-        }
-
-        if (!mounted) return;
-        showDialog(
-          context: context,
-          builder: (_) => AlertDialog(
-            title: const Text('Registro fallido'),
-            content: Text(message),
-            actions: [
-              TextButton(
-                onPressed: () => Navigator.pop(context),
-                child: const Text('Cerrar'),
-              ),
-            ],
-          ),
-        );
+        if (mounted) Navigator.pop(context);
+        return;
       }
-    } catch (e) {
-      // 7) Error de conexión o parsing
+
+      if (response.statusCode == 401) {
+        // Token inválido/expirado
+        await showDialog(
+          context: context,
+          builder: (_) => const AlertDialog(
+            title: Text('Sesión expirada'),
+            content: Text('Vuelve a iniciar sesión e inténtalo de nuevo.'),
+          ),
+        );
+        return;
+      }
+
+      // Intenta mostrar errores del backend
+      String message = 'Error desconocido';
+      try {
+        final body = jsonDecode(response.body);
+        if (body is Map<String, dynamic>) {
+          if (body['errors'] != null) {
+            final errs = (body['errors'] as Map<String, dynamic>)
+                .values
+                .expand((e) => (e as List).map((x) => x.toString()))
+                .join('\n');
+            message = errs;
+          } else if (body['message'] != null) {
+            message = body['message'].toString();
+          }
+        } else {
+          message = response.body.toString();
+        }
+      } catch (_) {
+        // Si vino HTML (p.ej., por redirección), muestra texto plano
+        message = response.body;
+      }
+
       if (!mounted) return;
-      showDialog(
+      await showDialog(
+        context: context,
+        builder: (_) => AlertDialog(
+          title: const Text('Registro fallido'),
+          content: Text(message),
+        ),
+      );
+    } catch (e) {
+      if (!mounted) return;
+      await showDialog(
         context: context,
         builder: (_) => AlertDialog(
           title: const Text('Error de conexión'),
           content: Text('No se pudo conectar al servidor.\n$e'),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.pop(context),
-              child: const Text('Cerrar'),
-            ),
-          ],
         ),
       );
     } finally {
@@ -219,7 +202,6 @@ class _CreateDriverScreenState extends State<CreateDriverScreen> {
                         borderRadius: BorderRadius.circular(12),
                       ),
                       elevation: 4,
-                      shadowColor: const Color.fromRGBO(0, 0, 0, 0.2),
                     ),
                     child: const Text(
                       'Guardar Chofer',

@@ -1,4 +1,4 @@
-package com.example.flashride_app
+package com.flashride.app
 
 import io.flutter.embedding.android.FlutterActivity
 

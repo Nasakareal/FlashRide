@@ -25,19 +25,23 @@ class WelcomeScreen extends StatelessWidget {
             Column(
               children: [
                 const SizedBox(height: 10),
-                const Icon(Icons.local_taxi, size: 70, color: Colors.amber),
+                Image.asset(
+                  'assets/images/logo_taxi.png',
+                  height: 120, // equivalente a size: 70
+                  fit: BoxFit.contain,
+                ),
                 const SizedBox(height: 20),
                 const Text(
-                  'FlashRide',
+                  'Taxi Seguro',
                   style: TextStyle(
                     fontSize: 34,
                     fontWeight: FontWeight.bold,
-                    color: Color(0xFF73003C), // color vino institucional
+                    color: Color(0xFFFF1B8F),
                   ),
                 ),
                 const SizedBox(height: 10),
                 const Text(
-                  'La forma más rápida de moverte',
+                  'La forma más rápida y segura de moverte',
                   style: TextStyle(
                     fontSize: 16,
                     color: Colors.black54,
@@ -51,15 +55,15 @@ class WelcomeScreen extends StatelessWidget {
                       ElevatedButton(
                         onPressed: () => Navigator.pushNamed(context, '/login'),
                         style: ElevatedButton.styleFrom(
-                          backgroundColor: Colors.amber[400],
-                          foregroundColor: Colors.black,
+                          backgroundColor: const Color(0xFFFF1B8F),
+                          foregroundColor: Colors.white,
                           minimumSize: const Size(double.infinity, 50),
                           shape: RoundedRectangleBorder(
                             borderRadius: BorderRadius.circular(12),
                           ),
                           elevation: 8,
-                          shadowColor:
-                              Colors.amber.withAlpha((255 * 0.3).toInt()),
+                          // CAMBIO: sombra basada en el mismo rosa
+                          shadowColor: const Color(0xFFFF1B8F).withOpacity(0.3),
                         ),
                         child: const Text('Iniciar sesión'),
                       ),
@@ -71,7 +75,7 @@ class WelcomeScreen extends StatelessWidget {
                           'Crear cuenta',
                           style: TextStyle(
                             fontSize: 16,
-                            color: Color(0xFF73003C),
+                            color: Color(0xFFFF1B8F),
                             decoration: TextDecoration.underline,
                           ),
                         ),

@@ -84,7 +84,7 @@ class _RegisterScreenState extends State<RegisterScreen> {
       backgroundColor: Colors.white,
       appBar: AppBar(
         title: const Text('Crear cuenta'),
-        backgroundColor: const Color(0xFF73003C),
+        backgroundColor: const Color(0xFFFF1B8F),
         foregroundColor: Colors.white,
       ),
       body: Padding(
@@ -124,8 +124,8 @@ class _RegisterScreenState extends State<RegisterScreen> {
                 : ElevatedButton(
                     onPressed: register,
                     style: ElevatedButton.styleFrom(
-                      backgroundColor: Colors.amber,
-                      foregroundColor: Colors.black,
+                      backgroundColor: const Color(0xFFFF1B8F),
+                      foregroundColor: Colors.white,
                       minimumSize: const Size(double.infinity, 50),
                     ),
                     child: const Text('Registrarse'),

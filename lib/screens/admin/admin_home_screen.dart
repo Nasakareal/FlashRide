@@ -11,7 +11,7 @@ class AdminHomeScreen extends StatelessWidget {
       backgroundColor: Colors.white,
       appBar: AppBar(
         title: const Text('Panel Administrador'),
-        backgroundColor: const Color(0xFF73003C),
+        backgroundColor: const Color(0xFFFF1B8F),
         foregroundColor: Colors.white,
       ),
       body: Padding(
@@ -72,7 +72,7 @@ class AdminHomeScreen extends StatelessWidget {
                 Navigator.pushReplacementNamed(context, '/login');
               },
               style: ElevatedButton.styleFrom(
-                backgroundColor: const Color(0xFF73003C),
+                backgroundColor: const Color(0xFFFF1B8F),
                 foregroundColor: Colors.white,
                 minimumSize: const Size(double.infinity, 50),
                 shape: RoundedRectangleBorder(

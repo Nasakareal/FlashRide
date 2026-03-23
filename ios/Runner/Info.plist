@@ -4,36 +4,54 @@
 <dict>
 	<key>CFBundleDevelopmentRegion</key>
 	<string>$(DEVELOPMENT_LANGUAGE)</string>
+
 	<key>CFBundleDisplayName</key>
-	<string>Flashride App</string>
+	<string>Taxi Seguro</string>
+
 	<key>CFBundleExecutable</key>
 	<string>$(EXECUTABLE_NAME)</string>
+
 	<key>CFBundleIdentifier</key>
 	<string>$(PRODUCT_BUNDLE_IDENTIFIER)</string>
+
 	<key>CFBundleInfoDictionaryVersion</key>
 	<string>6.0</string>
+
 	<key>CFBundleName</key>
-	<string>flashride_app</string>
+	<string>TaxiSeguro</string>
+
 	<key>CFBundlePackageType</key>
 	<string>APPL</string>
+
 	<key>CFBundleShortVersionString</key>
 	<string>$(FLUTTER_BUILD_NAME)</string>
+
 	<key>CFBundleSignature</key>
 	<string>????</string>
+
 	<key>CFBundleVersion</key>
 	<string>$(FLUTTER_BUILD_NUMBER)</string>
+
 	<key>LSRequiresIPhoneOS</key>
 	<true/>
+
+	<key>GMSApiKey</key>
+	<string>$(GMS_API_KEY)</string>
+
+	<key>ITSAppUsesNonExemptEncryption</key>
+	<false/>
+
 	<key>UILaunchStoryboardName</key>
 	<string>LaunchScreen</string>
+
 	<key>UIMainStoryboardFile</key>
 	<string>Main</string>
+
 	<key>UISupportedInterfaceOrientations</key>
 	<array>
 		<string>UIInterfaceOrientationPortrait</string>
-		<string>UIInterfaceOrientationLandscapeLeft</string>
-		<string>UIInterfaceOrientationLandscapeRight</string>
 	</array>
+
 	<key>UISupportedInterfaceOrientations~ipad</key>
 	<array>
 		<string>UIInterfaceOrientationPortrait</string>
@@ -41,9 +59,32 @@
 		<string>UIInterfaceOrientationLandscapeLeft</string>
 		<string>UIInterfaceOrientationLandscapeRight</string>
 	</array>
+
 	<key>CADisableMinimumFrameDurationOnPhone</key>
 	<true/>
+
 	<key>UIApplicationSupportsIndirectInputEvents</key>
 	<true/>
+
+	<!-- ========================= -->
+	<!-- PERMISOS / PRIVACIDAD iOS -->
+	<!-- ========================= -->
+
+	<!-- Ubicación mientras usas la app (viajes, mapa y ubicación del conductor/pasajero) -->
+	<key>NSLocationWhenInUseUsageDescription</key>
+	<string>Usamos tu ubicación para mostrar viajes cercanos, calcular rutas y compartir la ubicación durante el servicio.</string>
+
+	<!-- Cámara (SOLO si tomas fotos/evidencia) -->
+	<!--
+	<key>NSCameraUsageDescription</key>
+	<string>Usamos la cámara para capturar evidencia y adjuntarla a reportes.</string>
+	-->
+
+	<!-- Fotos/Galería (SOLO si seleccionas imágenes/archivos del carrete) -->
+	<!--
+	<key>NSPhotoLibraryUsageDescription</key>
+	<string>Usamos tu galería para seleccionar evidencia y adjuntarla a reportes.</string>
+	-->
+
 </dict>
 </plist>

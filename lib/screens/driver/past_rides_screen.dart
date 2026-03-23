@@ -15,6 +15,9 @@ class PastRidesScreen extends StatefulWidget {
 }
 
 class _PastRidesScreenState extends State<PastRidesScreen> {
+  // USA LA MISMA BASE QUE TE FUNCIONA CON curl:
+  static const String _api = 'https://158.23.170.129/flashride/public/api';
+
   bool _isLoading = true;
   int? _userId;
   List<dynamic> _pastRides = [];
@@ -27,50 +30,88 @@ class _PastRidesScreenState extends State<PastRidesScreen> {
 
   Future<void> _loadPastRides() async {
     setState(() => _isLoading = true);
+    try {
+      final token = await AuthService.getToken();
+      if (token == null) {
+        _logout();
+        return;
+      }
 
-    final token = await AuthService.getToken();
-    if (token == null) {
-      _logout();
-      return;
+      // 1) Perfil para obtener userId
+      final profileRes = await http.get(
+        Uri.parse('$_api/profile'),
+        headers: {
+          'Authorization': 'Bearer $token',
+          'Accept': 'application/json',
+        },
+      );
+
+      if (profileRes.statusCode == 200) {
+        final perfilJson = jsonDecode(profileRes.body) as Map<String, dynamic>;
+        _userId = (perfilJson['id'] as num?)?.toInt();
+      } else if (profileRes.statusCode == 401) {
+        _logout();
+        return;
+      } else {
+        // No cierres sesión por 301/404/500, solo muestra aviso
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+                content: Text('Error de perfil (${profileRes.statusCode})')),
+          );
+        }
+        setState(() {
+          _pastRides = [];
+          _isLoading = false;
+        });
+        return;
+      }
+
+      // 2) Viajes y filtrar completados del conductor
+      final ridesRes = await http.get(
+        Uri.parse('$_api/rides'),
+        headers: {
+          'Authorization': 'Bearer $token',
+          'Accept': 'application/json',
+        },
+      );
+
+      if (ridesRes.statusCode == 200) {
+        final lista = jsonDecode(ridesRes.body) as List<dynamic>;
+
+        // Ajusta el status si en tu backend usa 'completado' en lugar de 'completed'
+        const completedStatuses = {'completed', 'completado'};
+
+        _pastRides = lista.where((ride) {
+          final r = ride as Map<String, dynamic>;
+          final driverId = (r['driver_id'] as num?)?.toInt();
+          final status = (r['status'] ?? '').toString().toLowerCase();
+          return driverId == _userId && completedStatuses.contains(status);
+        }).toList();
+      } else if (ridesRes.statusCode == 401) {
+        _logout();
+        return;
+      } else {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+                content:
+                    Text('Error al obtener viajes (${ridesRes.statusCode})')),
+          );
+        }
+        _pastRides = [];
+      }
+    } catch (e) {
+      // Errores de red/SSL/etc: NO cierres sesión por esto
+      debugPrint('🚨 _loadPastRides error: $e');
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Error de red. Intenta de nuevo.')),
+        );
+      }
+    } finally {
+      if (mounted) setState(() => _isLoading = false);
     }
-
-    // 1) Obtener perfil para conocer el userId
-    final profileRes = await http.get(
-      Uri.parse('http://158.23.170.129/api/profile'),
-      headers: {
-        'Content-Type': 'application/json',
-        'Authorization': 'Bearer $token',
-      },
-    );
-
-    if (profileRes.statusCode != 200) {
-      _logout();
-      return;
-    }
-    final perfilJson = jsonDecode(profileRes.body) as Map<String, dynamic>;
-    _userId = perfilJson['id'] as int;
-
-    // 2) Traer todos los viajes y filtrar para este conductor los completados
-    final ridesRes = await http.get(
-      Uri.parse('http://158.23.170.129/api/rides'),
-      headers: {
-        'Content-Type': 'application/json',
-        'Authorization': 'Bearer $token',
-      },
-    );
-
-    if (ridesRes.statusCode == 200) {
-      final lista = jsonDecode(ridesRes.body) as List<dynamic>;
-      // Supuesto: status == 'completed' indica viaje terminado
-      _pastRides = lista.where((ride) {
-        final r = ride as Map<String, dynamic>;
-        return r['driver_id'] == _userId && r['status'] == 'completed';
-      }).toList();
-    } else {
-      _pastRides = [];
-    }
-
-    setState(() => _isLoading = false);
   }
 
   void _logout() async {
@@ -105,11 +146,11 @@ class _PastRidesScreenState extends State<PastRidesScreen> {
                     padding: const EdgeInsets.all(12),
                     itemCount: _pastRides.length,
                     itemBuilder: (context, index) {
-                      final ride = _pastRides[index] as Map<String, dynamic>;
-                      final origin = ride['origin'] as String? ?? '-';
-                      final destination = ride['destination'] as String? ?? '-';
-                      final rideId = ride['id'];
-                      final dateTime = ride['ended_at'] as String? ?? '-';
+                      final r = _pastRides[index] as Map<String, dynamic>;
+                      final origin = (r['origin'] ?? '-') as String;
+                      final destination = (r['destination'] ?? '-') as String;
+                      final rideId = r['id'];
+                      final dateTime = (r['ended_at'] ?? '-') as String;
 
                       return Card(
                         margin: const EdgeInsets.symmetric(vertical: 8),
@@ -129,7 +170,6 @@ class _PastRidesScreenState extends State<PastRidesScreen> {
                           trailing: IconButton(
                             icon: const Icon(Icons.info_outline),
                             onPressed: () {
-                              // Aquí podrías abrir un detalle de viaje ya terminado
                               ScaffoldMessenger.of(context).showSnackBar(
                                 SnackBar(
                                     content: Text('Detalles viaje #$rideId')),

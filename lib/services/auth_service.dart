@@ -4,7 +4,15 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'dart:developer' as dev;
 
 class AuthService {
-  static const _baseUrl = 'http://158.23.170.129/api';
+  // ⚡ Usa siempre HTTPS con /public/api
+  static const _baseUrl = 'https://158.23.170.129/flashride/public/api';
+
+  static String get baseUrl => _baseUrl;
+
+  static const _jsonHeaders = {
+    'Content-Type': 'application/json',
+    'Accept': 'application/json',
+  };
 
   /// LOGIN: devuelve true/false
   static Future<bool> login({
@@ -12,30 +20,54 @@ class AuthService {
     String? phone,
     required String password,
   }) async {
-    final body = {
-      'password': password,
-      if (email != null && email.isNotEmpty) 'email': email,
-      if (phone != null && phone.isNotEmpty) 'phone': phone,
-    };
+    try {
+      final String? emailTrim =
+          (email != null && email.trim().isNotEmpty) ? email.trim() : null;
+      final String? phoneDigits = (phone != null && phone.trim().isNotEmpty)
+          ? phone.replaceAll(RegExp(r'\D'), '')
+          : null;
 
-    final res = await http.post(
-      Uri.parse('$_baseUrl/login'),
-      headers: {'Content-Type': 'application/json'},
-      body: jsonEncode(body),
-    );
+      final Map<String, dynamic> body = {
+        'password': password,
+        if (emailTrim != null) 'email': emailTrim,
+        if (phoneDigits != null) 'phone': phoneDigits,
+      };
 
-    dev.log('📥 LOGIN ${res.statusCode}: ${res.body}');
-    if (res.statusCode == 200) {
-      final data = jsonDecode(res.body);
-      final prefs = await SharedPreferences.getInstance();
-      await prefs.setString('token', data['token']);
-      await prefs.setString('role', data['user']['role']);
-      return true;
+      if (!body.containsKey('email') && !body.containsKey('phone')) {
+        dev.log('❗ LOGIN sin email/phone');
+        return false;
+      }
+
+      final res = await http.post(
+        Uri.parse('$_baseUrl/login'),
+        headers: _jsonHeaders,
+        body: jsonEncode(body),
+      );
+
+      dev.log('📥 LOGIN ${res.statusCode}: ${res.body}');
+
+      if (res.statusCode == 200) {
+        final data = jsonDecode(res.body);
+        final prefs = await SharedPreferences.getInstance();
+        await prefs.setString('token', data['token'] as String);
+        await prefs.setString('role', (data['user']['role'] ?? '').toString());
+        return true;
+      } else {
+        try {
+          final err = jsonDecode(res.body);
+          dev.log('❌ LOGIN ERROR: $err');
+        } catch (_) {
+          dev.log('❌ LOGIN ERROR (raw): ${res.body}');
+        }
+        return false;
+      }
+    } catch (e) {
+      dev.log('🔥 LOGIN EXCEPTION: $e');
+      return false;
     }
-    return false;
   }
 
-  /// REGISTER: devuelve { ok:bool, errors:Map<String,List<String>> }
+  /// REGISTER
   static Future<Map<String, dynamic>> register({
     required String name,
     required String email,
@@ -44,39 +76,37 @@ class AuthService {
     required String passwordConfirmation,
   }) async {
     try {
+      final payload = {
+        'name': name.trim(),
+        'email': email.trim(),
+        'phone': phone.replaceAll(RegExp(r'\D'), ''),
+        'password': password,
+        'password_confirmation': passwordConfirmation,
+      };
+
       final res = await http.post(
         Uri.parse('$_baseUrl/register'),
-        headers: {'Content-Type': 'application/json'},
-        body: jsonEncode({
-          'name': name,
-          'email': email,
-          'phone': phone,
-          'password': password,
-          'password_confirmation': passwordConfirmation,
-        }),
+        headers: _jsonHeaders,
+        body: jsonEncode(payload),
       );
+
       dev.log('📥 REGISTER ${res.statusCode}: ${res.body}');
       final body = jsonDecode(res.body);
 
       if (res.statusCode == 201) {
-        // Éxito: guardamos token y rol
         final prefs = await SharedPreferences.getInstance();
         await prefs.setString('token', body['token']);
-        await prefs.setString('role', body['user']['role']);
+        await prefs.setString('role', (body['user']['role'] ?? '').toString());
         return {'ok': true};
       } else {
-        // Error de validación u otro
-        final errs = body['errors'] as Map<String, dynamic>? ??
+        final errs = (body['errors'] as Map<String, dynamic>?)
+                ?.map((k, v) => MapEntry(k, List<String>.from(v))) ??
             {
-              'general': [body['message'] ?? 'Error desconocido']
+              'general': [body['message']?.toString() ?? 'Error desconocido']
             };
-        return {
-          'ok': false,
-          'errors': errs.map((k, v) => MapEntry(k, List<String>.from(v))),
-        };
+        return {'ok': false, 'errors': errs};
       }
     } catch (e) {
-      // Falló la petición HTTP o parsing
       dev.log('🔥 REGISTER EXCEPTION: $e');
       return {
         'ok': false,
@@ -87,9 +117,15 @@ class AuthService {
     }
   }
 
+  /// Recupera el token
   static Future<String?> getToken() async {
     final prefs = await SharedPreferences.getInstance();
-    return prefs.getString('token');
+    final t = prefs.getString('token');
+    if (t == null || t.isEmpty) {
+      dev.log("⚠️ No hay token guardado en SharedPreferences");
+      return null;
+    }
+    return t;
   }
 
   static Future<String?> getUserRole() async {
@@ -100,5 +136,15 @@ class AuthService {
   static Future<void> logout() async {
     final prefs = await SharedPreferences.getInstance();
     await prefs.clear();
+  }
+
+  /// Helper para headers con token ya listo
+  static Future<Map<String, String>> authHeaders() async {
+    final token = await getToken();
+    return {
+      'Accept': 'application/json',
+      'Content-Type': 'application/json',
+      if (token != null) 'Authorization': 'Bearer $token',
+    };
   }
 }

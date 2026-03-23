@@ -66,14 +66,18 @@ class _LoginScreenState extends State<LoginScreen> {
           child: Column(
             mainAxisAlignment: MainAxisAlignment.center,
             children: [
-              const Icon(Icons.local_taxi, size: 60, color: Colors.amber),
+              Image.asset(
+                'assets/images/logo_taxi.png',
+                height: 120, // equivalente a size: 70
+                fit: BoxFit.contain,
+              ),
               const SizedBox(height: 30),
               const Text(
                 'Iniciar Sesión',
                 style: TextStyle(
                   fontSize: 28,
                   fontWeight: FontWeight.bold,
-                  color: Color(0xFF73003C),
+                  color: Color(0xFFFF1B8F),
                 ),
               ),
               const SizedBox(height: 25),
@@ -99,8 +103,8 @@ class _LoginScreenState extends State<LoginScreen> {
                   : ElevatedButton(
                       onPressed: login,
                       style: ElevatedButton.styleFrom(
-                        backgroundColor: Colors.amber[400],
-                        foregroundColor: Colors.black,
+                        backgroundColor: const Color(0xFFFF1B8F),
+                        foregroundColor: Colors.white,
                         minimumSize: const Size(double.infinity, 50),
                         shape: RoundedRectangleBorder(
                           borderRadius: BorderRadius.circular(12),
@@ -117,7 +121,7 @@ class _LoginScreenState extends State<LoginScreen> {
                   '¿No tienes cuenta? Regístrate',
                   style: TextStyle(
                     fontSize: 15,
-                    color: Color(0xFF73003C),
+                    color: Color(0xFFFF1B8F),
                     decoration: TextDecoration.underline,
                   ),
                 ),

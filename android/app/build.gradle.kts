@@ -1,3 +1,6 @@
+import java.util.Properties
+import java.io.FileInputStream
+
 plugins {
     id("com.android.application")
     id("kotlin-android")
@@ -5,13 +8,19 @@ plugins {
     id("dev.flutter.flutter-gradle-plugin")
 }
 
+val keystoreProperties = Properties().apply {
+    val keystorePropertiesFile = rootProject.file("key.properties")
+    if (keystorePropertiesFile.exists()) {
+        load(FileInputStream(keystorePropertiesFile))
+    }
+}
+
 android {
-    // El namespace debe coincidir con tu package en AndroidManifest.xml
-    namespace = "com.example.flashride_app"
+    namespace = "com.flashride.app"
     compileSdk = flutter.compileSdkVersion
 
     defaultConfig {
-        applicationId = "com.example.flashride_app"
+        applicationId = "com.flashride.app"
         // Asegúrate de no bajar de 23 para compatibilidad con google_api_headers
         minSdk = 23
         targetSdk = flutter.targetSdkVersion
@@ -19,10 +28,24 @@ android {
         versionName = flutter.versionName
     }
 
+    signingConfigs {
+        create("release") {
+            keyAlias = keystoreProperties["keyAlias"] as String
+            keyPassword = keystoreProperties["keyPassword"] as String
+            storeFile = file(keystoreProperties["storeFile"] as String)
+            storePassword = keystoreProperties["storePassword"] as String
+        }
+    }
+
     buildTypes {
         release {
-            // Firma con debug temporalmente para flutter run --release
-            signingConfig = signingConfigs.getByName("debug")
+            // Ahora sí firmamos con la llave de release
+            signingConfig = signingConfigs.getByName("release")
+            isMinifyEnabled = false
+            isShrinkResources = false
+        }
+        debug {
+            // debug normal
         }
     }
 
