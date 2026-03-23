@@ -6,6 +6,7 @@ Configuracion ya preparada en el proyecto:
 - Nombre visible: `Taxi Seguro`
 - Version Flutter tomada desde `pubspec.yaml`
 - App icons iOS cargados
+- Fuente de launcher icon separada en `assets/images/logo_taxi_appicon.png` sin transparencia
 - Permiso de ubicacion ajustado a uso en primer plano
 - Integracion lista para Google Maps con `GMS_API_KEY` en los `.xcconfig`
 - `Podfile` agregado para instalar dependencias iOS correctamente
