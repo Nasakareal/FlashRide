@@ -3,6 +3,7 @@ import 'dart:math' as math;
 import 'package:flutter_polyline_points/flutter_polyline_points.dart';
 import 'package:http/http.dart' as http;
 import 'package:latlong2/latlong.dart';
+import 'auth_service.dart';
 
 class TransitRouteSuggestion {
   final int routeId;
@@ -41,7 +42,7 @@ class TransitRouteSuggestion {
 }
 
 class TransitService {
-  static const String _base = 'https://158.23.170.129/flashride/public/api';
+  static final String _base = AuthService.baseUrl;
   static const double _nearThresholdMeters = 300;
   static const double _fallbackThresholdMeters = 700;
   static const double _maxSuggestedDistanceMeters = 1200;

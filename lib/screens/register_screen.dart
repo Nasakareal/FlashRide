@@ -16,11 +16,44 @@ class _RegisterScreenState extends State<RegisterScreen> {
   final confirmPasswordController = TextEditingController();
   bool isLoading = false;
 
+  @override
+  void dispose() {
+    nameController.dispose();
+    emailController.dispose();
+    phoneController.dispose();
+    passwordController.dispose();
+    confirmPasswordController.dispose();
+    super.dispose();
+  }
+
   void register() async {
+    final name = nameController.text.trim();
+    final email = emailController.text.trim().toLowerCase();
+    final phone = phoneController.text.replaceAll(RegExp(r'\D'), '');
     final pwd = passwordController.text.trim();
     final pwdConfirm = confirmPasswordController.text.trim();
 
-    // 1) Validación local de coincidencia de contraseñas
+    if (name.isEmpty ||
+        email.isEmpty ||
+        phone.isEmpty ||
+        pwd.isEmpty ||
+        pwdConfirm.isEmpty) {
+      showDialog(
+        context: context,
+        builder: (_) => AlertDialog(
+          title: const Text('Error'),
+          content: const Text('Todos los campos son obligatorios.'),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(context),
+              child: const Text('Cerrar'),
+            ),
+          ],
+        ),
+      );
+      return;
+    }
+
     if (pwd != pwdConfirm) {
       showDialog(
         context: context,
@@ -40,27 +73,36 @@ class _RegisterScreenState extends State<RegisterScreen> {
 
     setState(() => isLoading = true);
 
-    // 2) Llamada al servicio
     final result = await AuthService.register(
-      name: nameController.text.trim(),
-      email: emailController.text.trim(),
-      phone: phoneController.text.trim(),
+      name: name,
+      email: email,
+      phone: phone,
       password: pwd,
       passwordConfirmation: pwdConfirm,
     );
-    setState(() => isLoading = false);
+
+    if (mounted) {
+      setState(() => isLoading = false);
+    }
 
     debugPrint('🔥 Resultado de register(): $result');
 
     if (!mounted) return;
 
     if (result['ok'] == true) {
-      // Éxito: navegamos
       Navigator.pushReplacementNamed(context, '/ride/request');
     } else {
-      // Extraemos el primer mensaje de error
-      final errors = result['errors'] as Map<String, List<String>>;
-      final firstError = errors.values.expand((l) => l).first;
+      final rawErrors = result['errors'];
+      String firstError = 'Ocurrió un error al registrarse.';
+
+      if (rawErrors is Map) {
+        for (final value in rawErrors.values) {
+          if (value is List && value.isNotEmpty) {
+            firstError = value.first.toString();
+            break;
+          }
+        }
+      }
 
       showDialog(
         context: context,
@@ -94,29 +136,34 @@ class _RegisterScreenState extends State<RegisterScreen> {
             TextField(
               controller: nameController,
               decoration: const InputDecoration(labelText: 'Nombre completo'),
+              textInputAction: TextInputAction.next,
             ),
             TextField(
               controller: emailController,
               decoration:
                   const InputDecoration(labelText: 'Correo electrónico'),
               keyboardType: TextInputType.emailAddress,
+              textInputAction: TextInputAction.next,
             ),
             TextField(
               controller: phoneController,
               decoration:
                   const InputDecoration(labelText: 'Número de teléfono'),
               keyboardType: TextInputType.phone,
+              textInputAction: TextInputAction.next,
             ),
             TextField(
               controller: passwordController,
               obscureText: true,
               decoration: const InputDecoration(labelText: 'Contraseña'),
+              textInputAction: TextInputAction.next,
             ),
             TextField(
               controller: confirmPasswordController,
               obscureText: true,
               decoration:
                   const InputDecoration(labelText: 'Confirmar contraseña'),
+              onSubmitted: (_) => register(),
             ),
             const SizedBox(height: 20),
             isLoading

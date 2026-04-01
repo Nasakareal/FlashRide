@@ -56,34 +56,20 @@ class _EditVehicleScreenState extends State<EditVehicleScreen> {
         throw Exception('El objeto vehículo no trae id/vehicle_id.');
       }
 
-      // Usa el mismo host que tu listado (ajusta a https + /flashride/public si aplica)
-      final uriCandidates = <Uri>[
-        Uri.parse('http://158.23.170.129/api/vehicles/$id'),
-        Uri.parse('https://158.23.170.129/flashride/public/api/vehicles/$id'),
-      ];
-
-      http.Response? res;
-      for (final u in uriCandidates) {
-        res = await http.put(
-          u,
-          headers: {
-            'Content-Type': 'application/json',
-            'Accept': 'application/json',
-            if (token != null) 'Authorization': 'Bearer $token',
-          },
-          body: jsonEncode({
-            'plate': _plateCtrl.text.trim(),
-            'model': _modelCtrl.text.trim(),
-            'color':
-                _colorCtrl.text.trim().isEmpty ? null : _colorCtrl.text.trim(),
-          }),
-        );
-        if (res.statusCode == 200 || res.statusCode == 204) break;
-      }
-
-      if (res == null) {
-        throw Exception('Sin respuesta del servidor.');
-      }
+      final res = await http.put(
+        Uri.parse('${AuthService.baseUrl}/vehicles/$id'),
+        headers: {
+          'Content-Type': 'application/json',
+          'Accept': 'application/json',
+          if (token != null) 'Authorization': 'Bearer $token',
+        },
+        body: jsonEncode({
+          'plate': _plateCtrl.text.trim(),
+          'model': _modelCtrl.text.trim(),
+          'color':
+              _colorCtrl.text.trim().isEmpty ? null : _colorCtrl.text.trim(),
+        }),
+      );
 
       if (res.statusCode == 401 || res.statusCode == 403) {
         throw Exception('No autorizado (token inválido o sin permisos).');
@@ -104,10 +90,11 @@ class _EditVehicleScreenState extends State<EditVehicleScreen> {
         _error = e.toString();
       });
     } finally {
-      if (mounted)
+      if (mounted) {
         setState(() {
           _saving = false;
         });
+      }
     }
   }
 

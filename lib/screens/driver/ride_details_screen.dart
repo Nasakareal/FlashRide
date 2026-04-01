@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:google_maps_flutter/google_maps_flutter.dart';
 import 'package:http/http.dart' as http;
 import 'package:geolocator/geolocator.dart';
+import '../../services/auth_service.dart';
 
 class RideDetailsScreen extends StatefulWidget {
   final Map<String, dynamic> ride;
@@ -90,12 +91,17 @@ class _RideDetailsScreenState extends State<RideDetailsScreen> {
 
   Future<void> _cambiarEstado(String nuevoEstado) async {
     final rideId = widget.ride['id'];
-    final url = Uri.parse('http://158.23.170.129/api/rides/$rideId/status');
+    final url = Uri.parse('${AuthService.baseUrl}/rides/$rideId/status');
 
     try {
+      final token = await AuthService.getToken();
       final res = await http.post(
         url,
-        headers: {'Content-Type': 'application/json'},
+        headers: {
+          'Content-Type': 'application/json',
+          'Accept': 'application/json',
+          if (token != null) 'Authorization': 'Bearer $token',
+        },
         body: jsonEncode({'status': nuevoEstado}),
       );
 

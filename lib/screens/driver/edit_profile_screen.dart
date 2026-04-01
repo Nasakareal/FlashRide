@@ -15,7 +15,7 @@ class EditProfileScreen extends StatefulWidget {
 }
 
 class _EditProfileScreenState extends State<EditProfileScreen> {
-  static const String _api = 'https://158.23.170.129/flashride/public/api';
+  static final String _api = AuthService.baseUrl;
   static const _brand = Color(0xFFFF1B8F);
 
   final _formKey = GlobalKey<FormState>();

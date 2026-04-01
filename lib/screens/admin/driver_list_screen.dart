@@ -14,8 +14,7 @@ class DriverListScreen extends StatefulWidget {
 }
 
 class _DriverListScreenState extends State<DriverListScreen> {
-  // MISMA base que ya te funcionó con curl:
-  static const String _api = 'https://158.23.170.129/flashride/public/api';
+  static final String _api = AuthService.baseUrl;
 
   // Por si tu backend expone la lista en otra ruta,
   // probamos estas opciones en orden:
@@ -241,8 +240,9 @@ class _DriverListScreenState extends State<DriverListScreen> {
                                             ),
                                           ),
                                         );
-                                        if (actualizado == true)
+                                        if (actualizado == true) {
                                           _fetchDrivers();
+                                        }
                                       },
                                     ),
                                     IconButton(

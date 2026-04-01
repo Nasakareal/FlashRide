@@ -18,10 +18,8 @@ class ProfileScreen extends StatefulWidget {
 }
 
 class _ProfileScreenState extends State<ProfileScreen> {
-  // MISMA BASE que estás usando en driver:
-  static const String _api = 'https://158.23.170.129/flashride/public/api';
+  static final String _api = AuthService.baseUrl;
 
-  // MISMO color que DriverHomeScreen
   static const _brand = Color(0xFFFF1B8F);
 
   bool _isLoading = true;

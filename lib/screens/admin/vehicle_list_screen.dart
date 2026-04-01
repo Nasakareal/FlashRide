@@ -48,36 +48,14 @@ class _VehicleListScreenState extends State<VehicleListScreen> {
 
     try {
       final token = await AuthService.getToken();
-
-      // Intenta ambos hosts conocidos de tu API
-      final uriCandidates = <Uri>[
-        Uri.parse('http://158.23.170.129/api/vehicles?per_page=200'),
-        Uri.parse(
-            'https://158.23.170.129/flashride/public/api/vehicles?per_page=200'),
-      ];
-
-      http.Response? res;
-      for (final u in uriCandidates) {
-        final r = await http.get(
-          u,
-          headers: {
-            'Content-Type': 'application/json',
-            'Accept': 'application/json',
-            if (token != null) 'Authorization': 'Bearer $token',
-          },
-        );
-        if (r.statusCode == 200) {
-          res = r;
-          break;
-        } else {
-          // conserva el último intento por si todos fallan
-          res = r;
-        }
-      }
-
-      if (res == null) {
-        throw Exception('Sin respuesta del servidor.');
-      }
+      final res = await http.get(
+        Uri.parse('${AuthService.baseUrl}/vehicles?per_page=200'),
+        headers: {
+          'Content-Type': 'application/json',
+          'Accept': 'application/json',
+          if (token != null) 'Authorization': 'Bearer $token',
+        },
+      );
       if (res.statusCode == 401 || res.statusCode == 403) {
         throw Exception('No autorizado (token inválido o sin permisos).');
       }

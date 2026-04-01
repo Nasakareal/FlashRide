@@ -23,7 +23,7 @@ class DriverHomeScreen extends StatefulWidget {
 }
 
 class _DriverHomeScreenState extends State<DriverHomeScreen> {
-  static const String _api = 'https://158.23.170.129/flashride/public/api';
+  static final String _api = AuthService.baseUrl;
   static const _brand = Color(0xFFFF1B8F);
   static const LatLng _fallback = LatLng(19.7050, -101.1927);
   static const String _googleKey = 'AIzaSyAunhRNSucPlDvMPIAdah7pERRg-pJfKZw';

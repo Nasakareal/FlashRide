@@ -121,7 +121,7 @@ class _RideAwaitingScreenState extends State<RideAwaitingScreen> {
 
   Future<void> _confirmarRecogida() async {
     final rideId = widget.ride['id'];
-    final url = Uri.parse('http://158.23.170.129/api/rides/$rideId/fase');
+    final url = Uri.parse('${AuthService.baseUrl}/rides/$rideId/fase');
 
     try {
       final token = await AuthService.getToken(); // ← OBLIGATORIO

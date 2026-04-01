@@ -14,8 +14,7 @@ class PendingRidesScreen extends StatefulWidget {
 }
 
 class _PendingRidesScreenState extends State<PendingRidesScreen> {
-  // MISMA BASE QUE FUNCIONA EN curl:
-  static const String _api = 'https://158.23.170.129/flashride/public/api';
+  static final String _api = AuthService.baseUrl;
 
   List<dynamic> _pendingRides = [];
   bool _isLoading = true;

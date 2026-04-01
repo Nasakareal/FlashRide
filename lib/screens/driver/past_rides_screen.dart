@@ -15,8 +15,7 @@ class PastRidesScreen extends StatefulWidget {
 }
 
 class _PastRidesScreenState extends State<PastRidesScreen> {
-  // USA LA MISMA BASE QUE TE FUNCIONA CON curl:
-  static const String _api = 'https://158.23.170.129/flashride/public/api';
+  static final String _api = AuthService.baseUrl;
 
   bool _isLoading = true;
   int? _userId;

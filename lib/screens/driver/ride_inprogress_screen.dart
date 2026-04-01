@@ -23,7 +23,7 @@ class _DriverRideInProgressScreenState
   Set<Polyline> _polylines = {};
   Timer? _timer;
 
-  static const _api = "https://158.23.170.129/flashride/public/api";
+  static final String _api = AuthService.baseUrl;
 
   @override
   void initState() {

@@ -42,7 +42,6 @@ class _CreateDriverScreenState extends State<CreateDriverScreen> {
       final token = await AuthService.getToken();
       // Usa SIEMPRE la base del AuthService (HTTPS)
       // Ojo: tu AuthService tenía algo como:
-      // static const _baseUrl = 'https://158.23.170.129/flashride/public/api';
       final uri = Uri.parse('${AuthService.baseUrl}/drivers');
 
       final response = await http.post(

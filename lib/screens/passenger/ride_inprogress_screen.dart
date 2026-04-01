@@ -7,6 +7,7 @@ import 'package:http/http.dart' as http;
 import 'package:latlong2/latlong.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
+import '../../services/auth_service.dart';
 import 'ride_completed_screen.dart';
 
 class PassengerRideInProgressScreen extends StatefulWidget {
@@ -34,7 +35,7 @@ class _PassengerRideInProgressScreenState
   bool _navigating = false;
   bool _canceling = false;
 
-  static const _apiBase = "https://158.23.170.129/flashride/public/api";
+  static final String _apiBase = AuthService.baseUrl;
   static const _brand = Color(0xFFFF1B8F);
 
   LatLng? _lastRouteFrom;

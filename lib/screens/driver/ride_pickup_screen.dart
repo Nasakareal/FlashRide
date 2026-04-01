@@ -23,7 +23,7 @@ class _RidePickupScreenState extends State<RidePickupScreen> {
   Set<Marker> _markers = {};
   DateTime _lastCam = DateTime.fromMillisecondsSinceEpoch(0);
 
-  static const _api = 'https://158.23.170.129/flashride/public/api';
+  static final String _api = AuthService.baseUrl;
 
   StreamSubscription<Position>? _posSub;
   bool _sending = false;

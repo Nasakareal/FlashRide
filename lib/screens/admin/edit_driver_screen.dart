@@ -49,9 +49,10 @@ class _EditDriverScreenState extends State<EditDriverScreen> {
 
     final token = await AuthService.getToken();
     final res = await http.put(
-      Uri.parse('http://158.23.170.129/api/drivers/${widget.driverId}'),
+      Uri.parse('${AuthService.baseUrl}/drivers/${widget.driverId}'),
       headers: {
         'Content-Type': 'application/json',
+        'Accept': 'application/json',
         if (token != null) 'Authorization': 'Bearer $token',
       },
       body: jsonEncode({
