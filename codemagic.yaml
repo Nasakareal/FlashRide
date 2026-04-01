@@ -1,0 +1,27 @@
+workflows:
+  ios-simulator-preview:
+    name: iOS Simulator App Preview
+    max_build_duration: 60
+
+    environment:
+      flutter: stable
+
+    scripts:
+      - name: Get Flutter packages
+        script: |
+          flutter pub get
+
+      - name: Build iOS Simulator App (.app)
+        script: |
+          flutter build ios \
+            --simulator \
+            --debug \
+            --no-codesign
+
+      - name: Show output
+        script: |
+          ls -lh build/ios/iphonesimulator/
+
+    artifacts:
+      - build/ios/iphonesimulator/*.app
+      - build/ios/iphonesimulator/Runner.app
