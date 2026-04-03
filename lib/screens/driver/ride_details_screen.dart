@@ -18,6 +18,7 @@ class _RideDetailsScreenState extends State<RideDetailsScreen> {
   LatLng? _myPos;
   Set<Polyline> _polylines = {};
   Set<Marker> _markers = {};
+  static const LatLng _fallbackPosition = LatLng(19.7050, -101.1927);
 
   @override
   void initState() {
@@ -33,16 +34,32 @@ class _RideDetailsScreenState extends State<RideDetailsScreen> {
     final endLat = double.tryParse(widget.ride['end_lat'].toString()) ?? 0.0;
     final endLng = double.tryParse(widget.ride['end_lng'].toString()) ?? 0.0;
 
-    final pos = await Geolocator.getCurrentPosition();
-    _myPos = LatLng(pos.latitude, pos.longitude);
-
-    final origin = '${pos.latitude},${pos.longitude}';
-    final destination = '$endLat,$endLng';
-
-    final url =
-        'https://maps.googleapis.com/maps/api/directions/json?origin=$origin&destination=$destination&key=AIzaSyAunhRNSucPlDvMPIAdah7pERRg-pJfKZw';
-
     try {
+      final current = await _getCurrentLatLng() ?? _fallbackPosition;
+      if (!mounted) return;
+
+      setState(() {
+        _myPos = current;
+        _markers = {
+          Marker(
+            markerId: const MarkerId('origin'),
+            position: current,
+            infoWindow: const InfoWindow(title: 'Tú'),
+          ),
+          Marker(
+            markerId: const MarkerId('destination'),
+            position: LatLng(endLat, endLng),
+            infoWindow: const InfoWindow(title: 'Destino'),
+          ),
+        };
+      });
+
+      final origin = '${current.latitude},${current.longitude}';
+      final destination = '$endLat,$endLng';
+
+      final url =
+          'https://maps.googleapis.com/maps/api/directions/json?origin=$origin&destination=$destination&key=AIzaSyAunhRNSucPlDvMPIAdah7pERRg-pJfKZw';
+
       final res = await http.get(Uri.parse(url));
 
       if (res.statusCode != 200) {
@@ -58,11 +75,12 @@ class _RideDetailsScreenState extends State<RideDetailsScreen> {
       final points = data['routes'][0]['overview_polyline']['points'];
       final polyline = _decodePolyline(points);
 
+      if (!mounted) return;
       setState(() {
         _markers = {
           Marker(
             markerId: const MarkerId('origin'),
-            position: _myPos!,
+            position: current,
             infoWindow: const InfoWindow(title: 'Tú'),
           ),
           Marker(
@@ -87,6 +105,23 @@ class _RideDetailsScreenState extends State<RideDetailsScreen> {
         );
       }
     }
+  }
+
+  Future<LatLng?> _getCurrentLatLng() async {
+    if (!await Geolocator.isLocationServiceEnabled()) return null;
+
+    var permission = await Geolocator.checkPermission();
+    if (permission == LocationPermission.denied) {
+      permission = await Geolocator.requestPermission();
+    }
+
+    if (permission == LocationPermission.denied ||
+        permission == LocationPermission.deniedForever) {
+      return null;
+    }
+
+    final pos = await Geolocator.getCurrentPosition();
+    return LatLng(pos.latitude, pos.longitude);
   }
 
   Future<void> _cambiarEstado(String nuevoEstado) async {

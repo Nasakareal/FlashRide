@@ -21,6 +21,7 @@ class PassengerAwaitingScreen extends StatefulWidget {
 class _PassengerAwaitingScreenState extends State<PassengerAwaitingScreen> {
   static final String _API = AuthService.baseUrl;
   static const Color _appBarColor = Color(0xFFFF1B8F);
+  static const double _minCameraSpan = 0.0002;
 
   GoogleMapController? _mapController;
   Set<Marker> _markers = {};
@@ -148,29 +149,43 @@ class _PassengerAwaitingScreenState extends State<PassengerAwaitingScreen> {
     if (_mapController == null) return;
     if (DateTime.now().difference(_lastCameraMove).inMilliseconds < 900) return;
 
-    if (driver == null) {
-      _mapController!.animateCamera(
-        CameraUpdate.newCameraPosition(
-            CameraPosition(target: pickup, zoom: 15)),
-      );
-    } else {
-      final southWest = LatLng(
-        pickup.latitude < driver.latitude ? pickup.latitude : driver.latitude,
-        pickup.longitude < driver.longitude
-            ? pickup.longitude
-            : driver.longitude,
-      );
-      final northEast = LatLng(
-        pickup.latitude > driver.latitude ? pickup.latitude : driver.latitude,
-        pickup.longitude > driver.longitude
-            ? pickup.longitude
-            : driver.longitude,
-      );
-
-      final bounds = LatLngBounds(southwest: southWest, northeast: northEast);
-      _mapController!.animateCamera(CameraUpdate.newLatLngBounds(bounds, 80));
+    try {
+      if (driver == null) {
+        _mapController!.animateCamera(
+          CameraUpdate.newCameraPosition(
+            CameraPosition(target: pickup, zoom: 15),
+          ),
+        );
+      } else {
+        _mapController!.animateCamera(
+          CameraUpdate.newLatLngBounds(_safeBounds(pickup, driver), 80),
+        );
+      }
+      _lastCameraMove = DateTime.now();
+    } catch (e) {
+      debugPrint('Camera update skipped: $e');
     }
-    _lastCameraMove = DateTime.now();
+  }
+
+  LatLngBounds _safeBounds(LatLng a, LatLng b) {
+    var minLat = a.latitude < b.latitude ? a.latitude : b.latitude;
+    var maxLat = a.latitude > b.latitude ? a.latitude : b.latitude;
+    var minLng = a.longitude < b.longitude ? a.longitude : b.longitude;
+    var maxLng = a.longitude > b.longitude ? a.longitude : b.longitude;
+
+    if ((maxLat - minLat).abs() < _minCameraSpan) {
+      minLat -= _minCameraSpan / 2;
+      maxLat += _minCameraSpan / 2;
+    }
+    if ((maxLng - minLng).abs() < _minCameraSpan) {
+      minLng -= _minCameraSpan / 2;
+      maxLng += _minCameraSpan / 2;
+    }
+
+    return LatLngBounds(
+      southwest: LatLng(minLat, minLng),
+      northeast: LatLng(maxLat, maxLng),
+    );
   }
 
   void _startPolling() {

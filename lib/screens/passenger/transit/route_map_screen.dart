@@ -11,10 +11,12 @@ import '../../../services/transit_service.dart';
 class TransitRouteMapScreen extends StatefulWidget {
   final int routeId;
   final String title;
+  final Map<String, dynamic>? initialRouteData;
   const TransitRouteMapScreen({
     super.key,
     required this.routeId,
     required this.title,
+    this.initialRouteData,
   });
 
   @override
@@ -24,6 +26,7 @@ class TransitRouteMapScreen extends StatefulWidget {
 class _TransitRouteMapScreenState extends State<TransitRouteMapScreen> {
   static const int _BUS_ICON_PX = 56; // tamaño del ícono
   static const bool _SHOW_STOPS = false;
+  static const double _minCameraSpan = 0.0002;
 
   final _svc = TransitService();
 
@@ -49,7 +52,7 @@ class _TransitRouteMapScreenState extends State<TransitRouteMapScreen> {
 
   @override
   void dispose() {
-    _timer?.cancel();
+    _stopVehiclePolling();
     super.dispose();
   }
 
@@ -114,6 +117,10 @@ class _TransitRouteMapScreenState extends State<TransitRouteMapScreen> {
         _err = null;
       });
 
+      if (widget.initialRouteData != null) {
+        _svc.seedRoute(widget.initialRouteData!);
+      }
+
       final data = await _svc.fetchRoute(widget.routeId);
 
       // ---- Polyline ----
@@ -142,9 +149,13 @@ class _TransitRouteMapScreenState extends State<TransitRouteMapScreen> {
             if (_map != null && !_didFit) {
               _didFit = true;
               await Future.delayed(const Duration(milliseconds: 150));
-              _map?.animateCamera(
-                CameraUpdate.newLatLngBounds(_bounds(coords), 48),
-              );
+              try {
+                _map?.animateCamera(
+                  CameraUpdate.newLatLngBounds(_bounds(coords), 48),
+                );
+              } catch (e) {
+                debugPrint('Camera update skipped: $e');
+              }
             }
           });
         }
@@ -189,17 +200,26 @@ class _TransitRouteMapScreenState extends State<TransitRouteMapScreen> {
       if (mounted) setState(() {});
 
       await _refreshVehicles();
-
-      _timer = Timer.periodic(
-        const Duration(seconds: 10),
-        (_) => _refreshVehicles(),
-      );
     } catch (e) {
       if (!mounted) return;
       setState(() {
-        _err = e.toString();
+        _err = transitFriendlyError(e);
       });
     }
+  }
+
+  void _startVehiclePolling() {
+    if (_timer != null) return;
+
+    _timer = Timer.periodic(
+      const Duration(seconds: 15),
+      (_) => _refreshVehicles(),
+    );
+  }
+
+  void _stopVehiclePolling() {
+    _timer?.cancel();
+    _timer = null;
   }
 
   Future<void> _refreshVehicles() async {
@@ -249,10 +269,17 @@ class _TransitRouteMapScreenState extends State<TransitRouteMapScreen> {
 
       final nextEmpty = v.isEmpty ? 'Sin unidades activas en esta ruta.' : '';
 
+      if (v.isEmpty) {
+        _stopVehiclePolling();
+      } else {
+        _startVehiclePolling();
+      }
+
       if (hasher != _vehHash || nextEmpty != _emptyMsg) {
         _vehHash = hasher;
         if (!mounted) return;
         setState(() {
+          _err = null;
           _emptyMsg = nextEmpty;
           _markers
             ..clear()
@@ -260,9 +287,12 @@ class _TransitRouteMapScreenState extends State<TransitRouteMapScreen> {
         });
       }
     } catch (e) {
+      if (e is TransitRateLimitException) {
+        _stopVehiclePolling();
+      }
       if (!mounted) return;
       setState(() {
-        _err = e.toString();
+        _err = transitFriendlyError(e);
       });
     }
   }
@@ -276,6 +306,16 @@ class _TransitRouteMapScreenState extends State<TransitRouteMapScreen> {
       if (p.longitude < minLng) minLng = p.longitude;
       if (p.longitude > maxLng) maxLng = p.longitude;
     }
+
+    if ((maxLat - minLat).abs() < _minCameraSpan) {
+      minLat -= _minCameraSpan / 2;
+      maxLat += _minCameraSpan / 2;
+    }
+    if ((maxLng - minLng).abs() < _minCameraSpan) {
+      minLng -= _minCameraSpan / 2;
+      maxLng += _minCameraSpan / 2;
+    }
+
     return LatLngBounds(
       southwest: LatLng(minLat, minLng),
       northeast: LatLng(maxLat, maxLng),

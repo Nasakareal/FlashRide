@@ -31,7 +31,11 @@ class _TransitRouteListScreenState extends State<TransitRouteListScreen> {
       setState(() => _loading = false);
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Error cargando rutas: $e')),
+          SnackBar(
+            content: Text(
+              'Error cargando rutas: ${transitFriendlyError(e)}',
+            ),
+          ),
         );
       }
     }
@@ -92,6 +96,7 @@ class _TransitRouteListScreenState extends State<TransitRouteListScreen> {
                   builder: (_) => TransitRouteMapScreen(
                     routeId: r['id'] as int,
                     title: short.isEmpty ? 'Ruta' : 'Ruta $short',
+                    initialRouteData: Map<String, dynamic>.from(r as Map),
                   ),
                 ),
               );
@@ -184,6 +189,7 @@ class TransitRouteSearchDelegate extends SearchDelegate {
                 builder: (_) => TransitRouteMapScreen(
                   routeId: r['id'] as int,
                   title: short.isEmpty ? 'Ruta' : 'Ruta $short',
+                  initialRouteData: Map<String, dynamic>.from(r as Map),
                 ),
               ),
             );
@@ -218,6 +224,7 @@ class TransitRouteSearchDelegate extends SearchDelegate {
                 builder: (_) => TransitRouteMapScreen(
                   routeId: r['id'] as int,
                   title: short.isEmpty ? 'Ruta' : 'Ruta $short',
+                  initialRouteData: Map<String, dynamic>.from(r as Map),
                 ),
               ),
             );

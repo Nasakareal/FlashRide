@@ -17,6 +17,7 @@ class DriverRideInProgressScreen extends StatefulWidget {
 
 class _DriverRideInProgressScreenState
     extends State<DriverRideInProgressScreen> {
+  static const double _minCameraSpan = 0.0002;
   GoogleMapController? _mapController;
   LatLng? _myPos;
   Set<Marker> _markers = {};
@@ -28,7 +29,7 @@ class _DriverRideInProgressScreenState
   @override
   void initState() {
     super.initState();
-    _loadRoute();
+    _bootstrapMap();
     _timer = Timer.periodic(const Duration(seconds: 8), (_) async {
       await _updateDriverLocation();
       await _loadRoute();
@@ -39,6 +40,14 @@ class _DriverRideInProgressScreenState
   void dispose() {
     _timer?.cancel();
     super.dispose();
+  }
+
+  Future<void> _bootstrapMap() async {
+    await _updateDriverLocation();
+    await _loadRoute();
+    if (mounted) {
+      setState(() {});
+    }
   }
 
   Future<void> _updateDriverLocation() async {
@@ -119,26 +128,34 @@ class _DriverRideInProgressScreenState
 
   void _fitBounds(LatLng destino) {
     if (_mapController == null || _myPos == null) return;
+    try {
+      _mapController!.animateCamera(
+        CameraUpdate.newLatLngBounds(_safeBounds(_myPos!, destino), 80),
+      );
+    } catch (e) {
+      debugPrint('Camera update skipped: $e');
+    }
+  }
 
-    final sw = LatLng(
-      (_myPos!.latitude < destino.latitude)
-          ? _myPos!.latitude
-          : destino.latitude,
-      (_myPos!.longitude < destino.longitude)
-          ? _myPos!.longitude
-          : destino.longitude,
-    );
-    final ne = LatLng(
-      (_myPos!.latitude > destino.latitude)
-          ? _myPos!.latitude
-          : destino.latitude,
-      (_myPos!.longitude > destino.longitude)
-          ? _myPos!.longitude
-          : destino.longitude,
-    );
+  LatLngBounds _safeBounds(LatLng a, LatLng b) {
+    var minLat = a.latitude < b.latitude ? a.latitude : b.latitude;
+    var maxLat = a.latitude > b.latitude ? a.latitude : b.latitude;
+    var minLng = a.longitude < b.longitude ? a.longitude : b.longitude;
+    var maxLng = a.longitude > b.longitude ? a.longitude : b.longitude;
 
-    final bounds = LatLngBounds(southwest: sw, northeast: ne);
-    _mapController!.animateCamera(CameraUpdate.newLatLngBounds(bounds, 80));
+    if ((maxLat - minLat).abs() < _minCameraSpan) {
+      minLat -= _minCameraSpan / 2;
+      maxLat += _minCameraSpan / 2;
+    }
+    if ((maxLng - minLng).abs() < _minCameraSpan) {
+      minLng -= _minCameraSpan / 2;
+      maxLng += _minCameraSpan / 2;
+    }
+
+    return LatLngBounds(
+      southwest: LatLng(minLat, minLng),
+      northeast: LatLng(maxLat, maxLng),
+    );
   }
 
   List<LatLng> _decodePolyline(String encoded) {

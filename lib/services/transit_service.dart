@@ -1,9 +1,38 @@
+import 'dart:async';
 import 'dart:convert';
 import 'dart:math' as math;
 import 'package:flutter_polyline_points/flutter_polyline_points.dart';
 import 'package:http/http.dart' as http;
 import 'package:latlong2/latlong.dart';
 import 'auth_service.dart';
+
+class TransitRateLimitException implements Exception {
+  final String resource;
+  final Duration? retryAfter;
+
+  const TransitRateLimitException({
+    required this.resource,
+    this.retryAfter,
+  });
+
+  String get message {
+    final seconds = retryAfter?.inSeconds;
+    if (seconds != null && seconds > 0) {
+      return 'Demasiadas consultas para $resource. Intenta de nuevo en $seconds s.';
+    }
+    return 'Demasiadas consultas para $resource. Intenta de nuevo en unos segundos.';
+  }
+
+  @override
+  String toString() => message;
+}
+
+String transitFriendlyError(Object error) {
+  if (error is TransitRateLimitException) {
+    return error.message;
+  }
+  return error.toString();
+}
 
 class TransitRouteSuggestion {
   final int routeId;
@@ -47,10 +76,28 @@ class TransitService {
   static const double _fallbackThresholdMeters = 700;
   static const double _maxSuggestedDistanceMeters = 1200;
   static const Distance _distance = Distance();
+  static const Duration _routesTtl = Duration(minutes: 5);
+  static const Duration _routeTtl = Duration(minutes: 10);
+  static const Duration _vehiclesTtl = Duration(seconds: 12);
+  static const Duration _defaultBackoff = Duration(seconds: 30);
 
-  List<dynamic>? _routesCache;
-  final Map<int, Map<String, dynamic>> _routeCache =
+  static List<dynamic>? _routesCache;
+  static DateTime? _routesCacheAt;
+  static Future<List<dynamic>>? _routesInFlight;
+
+  static final Map<int, Map<String, dynamic>> _routeCache =
       <int, Map<String, dynamic>>{};
+  static final Map<int, DateTime> _routeCacheAt = <int, DateTime>{};
+  static final Map<int, Future<Map<String, dynamic>>> _routeInFlight =
+      <int, Future<Map<String, dynamic>>>{};
+
+  static final Map<String, List<dynamic>> _vehiclesCache =
+      <String, List<dynamic>>{};
+  static final Map<String, DateTime> _vehiclesCacheAt = <String, DateTime>{};
+  static final Map<String, Future<List<dynamic>>> _vehiclesInFlight =
+      <String, Future<List<dynamic>>>{};
+
+  static final Map<String, DateTime> _backoffUntil = <String, DateTime>{};
 
   Map<String, String> get _headers => const {
         'Accept': 'application/json',
@@ -63,59 +110,276 @@ class TransitService {
     return Uri.parse('$b$p');
   }
 
+  bool _isFresh(DateTime? fetchedAt, Duration ttl) {
+    if (fetchedAt == null) return false;
+    return DateTime.now().difference(fetchedAt) < ttl;
+  }
+
+  Duration? _retryAfter(http.Response response) {
+    final raw = response.headers['retry-after'];
+    if (raw == null || raw.trim().isEmpty) return null;
+
+    final seconds = int.tryParse(raw.trim());
+    if (seconds != null) {
+      return Duration(seconds: seconds.clamp(1, 600));
+    }
+
+    final retryAt = DateTime.tryParse(raw);
+    if (retryAt == null) return null;
+
+    final diff = retryAt.toUtc().difference(DateTime.now().toUtc());
+    return diff.isNegative ? Duration.zero : diff;
+  }
+
+  Duration? _activeBackoff(String key) {
+    final until = _backoffUntil[key];
+    if (until == null) return null;
+
+    final diff = until.difference(DateTime.now());
+    if (diff.isNegative) {
+      _backoffUntil.remove(key);
+      return null;
+    }
+
+    return diff;
+  }
+
+  void _setBackoff(String key, Duration? retryAfter) {
+    _backoffUntil[key] = DateTime.now().add(retryAfter ?? _defaultBackoff);
+  }
+
+  TransitRateLimitException _rateLimit(
+    String resource, {
+    Duration? retryAfter,
+  }) {
+    return TransitRateLimitException(
+      resource: resource,
+      retryAfter: retryAfter,
+    );
+  }
+
+  Map<String, dynamic>? _routeFromRoutesCache(int id) {
+    final routes = _routesCache;
+    if (routes == null) return null;
+
+    for (final raw in routes.whereType<Map>()) {
+      final route = _mapFrom(raw);
+      if (_toInt(route['id']) == id) {
+        return route;
+      }
+    }
+
+    return null;
+  }
+
+  void seedRoute(Map<String, dynamic> routeData) {
+    final route = Map<String, dynamic>.from(routeData);
+    if (!_hasGeometry(route)) return;
+
+    final id = _toInt(route['id']);
+    if (id == null) return;
+
+    _routeCache[id] = route;
+    _routeCacheAt[id] = DateTime.now();
+  }
+
   Future<List<dynamic>> fetchRoutes({bool forceRefresh = false}) async {
-    if (!forceRefresh && _routesCache != null) {
+    const backoffKey = 'routes';
+
+    if (!forceRefresh &&
+        _routesCache != null &&
+        _isFresh(_routesCacheAt, _routesTtl)) {
       return _routesCache!;
     }
 
-    final r = await http
-        .get(_u('/transit/routes'), headers: _headers)
-        .timeout(const Duration(seconds: 12));
-    if (r.statusCode != 200) {
-      throw Exception('HTTP ${r.statusCode}: ${r.body}');
-    }
-    final j = jsonDecode(r.body);
-    if (j is! List) throw Exception('payload inválido (routes)');
+    if (!forceRefresh) {
+      final backoff = _activeBackoff(backoffKey);
+      if (backoff != null) {
+        if (_routesCache != null) return _routesCache!;
+        throw _rateLimit('las rutas', retryAfter: backoff);
+      }
 
-    _routesCache = List<dynamic>.from(j);
-    return _routesCache!;
+      if (_routesInFlight != null) return _routesInFlight!;
+    }
+
+    final future = () async {
+      final r = await http
+          .get(_u('/transit/routes'), headers: _headers)
+          .timeout(const Duration(seconds: 12));
+
+      if (r.statusCode == 429) {
+        final retryAfter = _retryAfter(r);
+        _setBackoff(backoffKey, retryAfter);
+        if (_routesCache != null) return _routesCache!;
+        throw _rateLimit('las rutas', retryAfter: retryAfter);
+      }
+
+      if (r.statusCode != 200) {
+        throw Exception('HTTP ${r.statusCode}: ${r.body}');
+      }
+
+      final j = jsonDecode(r.body);
+      if (j is! List) throw Exception('payload inválido (routes)');
+
+      _routesCache = List<dynamic>.from(j);
+      _routesCacheAt = DateTime.now();
+
+      for (final raw in _routesCache!.whereType<Map>()) {
+        final route = _mapFrom(raw);
+        final id = _toInt(route['id']);
+        if (id != null && _hasGeometry(route)) {
+          _routeCache[id] = route;
+          _routeCacheAt[id] = _routesCacheAt!;
+        }
+      }
+
+      return _routesCache!;
+    }();
+
+    if (!forceRefresh) {
+      _routesInFlight = future;
+    }
+
+    try {
+      return await future;
+    } finally {
+      if (identical(_routesInFlight, future)) {
+        _routesInFlight = null;
+      }
+    }
   }
 
   Future<Map<String, dynamic>> fetchRoute(
     int id, {
     bool forceRefresh = false,
   }) async {
-    if (!forceRefresh && _routeCache.containsKey(id)) {
+    final backoffKey = 'route:$id';
+
+    if (!forceRefresh &&
+        _routeCache.containsKey(id) &&
+        _isFresh(_routeCacheAt[id], _routeTtl)) {
       return _routeCache[id]!;
     }
 
-    final r = await http
-        .get(_u('/transit/routes/$id'), headers: _headers)
-        .timeout(const Duration(seconds: 12));
-    if (r.statusCode != 200) {
-      throw Exception('HTTP ${r.statusCode}: ${r.body}');
-    }
-    final j = jsonDecode(r.body);
-    if (j is! Map<String, dynamic>) throw Exception('payload inválido (route)');
+    if (!forceRefresh) {
+      final fromRoutesCache = _routeFromRoutesCache(id);
+      if (fromRoutesCache != null && _hasGeometry(fromRoutesCache)) {
+        _routeCache[id] = fromRoutesCache;
+        _routeCacheAt[id] = DateTime.now();
+        return fromRoutesCache;
+      }
 
-    _routeCache[id] = j;
-    return j;
+      final backoff = _activeBackoff(backoffKey);
+      if (backoff != null) {
+        final cached = _routeCache[id];
+        if (cached != null) return cached;
+        throw _rateLimit('la ruta', retryAfter: backoff);
+      }
+
+      final inFlight = _routeInFlight[id];
+      if (inFlight != null) return inFlight;
+    }
+
+    final future = () async {
+      final r = await http
+          .get(_u('/transit/routes/$id'), headers: _headers)
+          .timeout(const Duration(seconds: 12));
+
+      if (r.statusCode == 429) {
+        final retryAfter = _retryAfter(r);
+        _setBackoff(backoffKey, retryAfter);
+        final cached = _routeCache[id];
+        if (cached != null) return cached;
+        throw _rateLimit('la ruta', retryAfter: retryAfter);
+      }
+
+      if (r.statusCode != 200) {
+        throw Exception('HTTP ${r.statusCode}: ${r.body}');
+      }
+
+      final j = jsonDecode(r.body);
+      if (j is! Map<String, dynamic>) {
+        throw Exception('payload inválido (route)');
+      }
+
+      _routeCache[id] = j;
+      _routeCacheAt[id] = DateTime.now();
+      return j;
+    }();
+
+    if (!forceRefresh) {
+      _routeInFlight[id] = future;
+    }
+
+    try {
+      return await future;
+    } finally {
+      if (identical(_routeInFlight[id], future)) {
+        _routeInFlight.remove(id);
+      }
+    }
   }
 
   Future<List<dynamic>> fetchVehicles({int? transitRouteId}) async {
+    final cacheKey = transitRouteId == null
+        ? 'vehicles:all'
+        : 'vehicles:route:$transitRouteId';
+    final resource =
+        transitRouteId == null ? 'las unidades' : 'las unidades de la ruta';
     final Uri url = (transitRouteId == null)
         ? _u('/transit/vehicles')
         : _u('/transit/routes/$transitRouteId/vehicles');
 
-    final r = await http
-        .get(url, headers: _headers)
-        .timeout(const Duration(seconds: 12));
-    if (r.statusCode != 200) {
-      throw Exception('HTTP ${r.statusCode}: ${r.body}');
+    if (_vehiclesCache.containsKey(cacheKey) &&
+        _isFresh(_vehiclesCacheAt[cacheKey], _vehiclesTtl)) {
+      return _vehiclesCache[cacheKey]!;
     }
-    final j = jsonDecode(r.body);
-    if (j is! List) throw Exception('payload inválido (vehicles)');
-    return j;
+
+    final backoff = _activeBackoff(cacheKey);
+    if (backoff != null) {
+      final cached = _vehiclesCache[cacheKey];
+      if (cached != null) return cached;
+      throw _rateLimit(resource, retryAfter: backoff);
+    }
+
+    final inFlight = _vehiclesInFlight[cacheKey];
+    if (inFlight != null) return inFlight;
+
+    final future = () async {
+      final r = await http
+          .get(url, headers: _headers)
+          .timeout(const Duration(seconds: 12));
+
+      if (r.statusCode == 429) {
+        final retryAfter = _retryAfter(r);
+        _setBackoff(cacheKey, retryAfter);
+        final cached = _vehiclesCache[cacheKey];
+        if (cached != null) return cached;
+        throw _rateLimit(resource, retryAfter: retryAfter);
+      }
+
+      if (r.statusCode != 200) {
+        throw Exception('HTTP ${r.statusCode}: ${r.body}');
+      }
+
+      final j = jsonDecode(r.body);
+      if (j is! List) throw Exception('payload inválido (vehicles)');
+
+      final list = List<dynamic>.from(j);
+      _vehiclesCache[cacheKey] = list;
+      _vehiclesCacheAt[cacheKey] = DateTime.now();
+      return list;
+    }();
+
+    _vehiclesInFlight[cacheKey] = future;
+
+    try {
+      return await future;
+    } finally {
+      if (identical(_vehiclesInFlight[cacheKey], future)) {
+        _vehiclesInFlight.remove(cacheKey);
+      }
+    }
   }
 
   Future<List<TransitRouteSuggestion>> suggestRoutesForDestination({

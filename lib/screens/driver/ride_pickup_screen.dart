@@ -17,6 +17,7 @@ class RidePickupScreen extends StatefulWidget {
 }
 
 class _RidePickupScreenState extends State<RidePickupScreen> {
+  static const double _minCameraSpan = 0.0002;
   GoogleMapController? _mapController;
   LatLng? _myPos;
   Set<Polyline> _polylines = {};
@@ -229,23 +230,35 @@ class _RidePickupScreenState extends State<RidePickupScreen> {
   void _fitBounds(LatLng a, LatLng b) {
     if (_mapController == null) return;
     if (DateTime.now().difference(_lastCam).inMilliseconds < 900) return;
+    try {
+      _mapController!.animateCamera(
+        CameraUpdate.newLatLngBounds(_safeBounds(a, b), 80),
+      );
+      _lastCam = DateTime.now();
+    } catch (e) {
+      debugPrint('Camera update skipped: $e');
+    }
+  }
 
-    final sw = LatLng(
-      a.latitude < b.latitude ? a.latitude : b.latitude,
-      a.longitude < b.longitude ? a.longitude : b.longitude,
-    );
-    final ne = LatLng(
-      a.latitude > b.latitude ? a.latitude : b.latitude,
-      a.longitude > b.longitude ? a.longitude : b.longitude,
-    );
+  LatLngBounds _safeBounds(LatLng a, LatLng b) {
+    var minLat = a.latitude < b.latitude ? a.latitude : b.latitude;
+    var maxLat = a.latitude > b.latitude ? a.latitude : b.latitude;
+    var minLng = a.longitude < b.longitude ? a.longitude : b.longitude;
+    var maxLng = a.longitude > b.longitude ? a.longitude : b.longitude;
 
-    _mapController!.animateCamera(
-      CameraUpdate.newLatLngBounds(
-        LatLngBounds(southwest: sw, northeast: ne),
-        80,
-      ),
+    if ((maxLat - minLat).abs() < _minCameraSpan) {
+      minLat -= _minCameraSpan / 2;
+      maxLat += _minCameraSpan / 2;
+    }
+    if ((maxLng - minLng).abs() < _minCameraSpan) {
+      minLng -= _minCameraSpan / 2;
+      maxLng += _minCameraSpan / 2;
+    }
+
+    return LatLngBounds(
+      southwest: LatLng(minLat, minLng),
+      northeast: LatLng(maxLat, maxLng),
     );
-    _lastCam = DateTime.now();
   }
 
   Future<void> _startTrip() async {
